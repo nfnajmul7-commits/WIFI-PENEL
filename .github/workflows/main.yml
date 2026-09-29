@@ -23,14 +23,18 @@ jobs:
       - name: Detect Project Type
         id: detect
         run: |
-          if [ -f "pubspec.yaml" ] || [ -f "frontend/pubspec.yaml" ]; then
+          FLUTTER_FILE=$(find . -name "pubspec.yaml" -not -path "*/.*" -not -path "*/starter_app/*" | head -n 1)
+          if [ -n "$FLUTTER_FILE" ]; then
+            FLUTTER_DIR=$(dirname "$FLUTTER_FILE")
             echo "type=flutter" >> $GITHUB_OUTPUT
-            echo "✅ Flutter project detected with pubspec.yaml"
+            echo "flutter_dir=$FLUTTER_DIR" >> $GITHUB_OUTPUT
+            echo "✅ Flutter project detected in: $FLUTTER_DIR"
           elif [ -f "package.json" ]; then
             echo "type=node" >> $GITHUB_OUTPUT
             echo "✅ Node.js / React project detected"
           else
             echo "type=starter_flutter" >> $GITHUB_OUTPUT
+            echo "flutter_dir=starter_app" >> $GITHUB_OUTPUT
             echo "⚠️ No pubspec.yaml found yet; will auto-initialize to prevent failure"
           fi
 
@@ -50,43 +54,55 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Configure Gradle 8.5 & Fix Wrapper Distribution
+        if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
+        run: |
+          echo "Ensuring Gradle 8.5 across all android wrapper configurations..."
+          # Update or create gradle-wrapper.properties everywhere
+          find . -type d -name "android" | while read -r android_dir; do
+            wrapper_dir="$android_dir/gradle/wrapper"
+            mkdir -p "$wrapper_dir"
+            wrapper_file="$wrapper_dir/gradle-wrapper.properties"
+            echo "Writing Gradle 8.5 wrapper to $wrapper_file"
+            cat << 'EOF' > "$wrapper_file"
+distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-all.zip
+EOF
+          done
+
+          # Replace old gradle versions (< 8.4) in any other gradle-wrapper.properties
+          find . -name "gradle-wrapper.properties" -exec sed -i -E 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-all.zip|g' {} +
+          echo "✅ All Gradle wrappers are updated to Gradle 8.5!"
+
       - name: Prepare Flutter Project & Dependencies
         if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
         run: |
-          if [ -f "pubspec.yaml" ]; then
-            echo "Running pub get in root directory..."
-            flutter pub get
-          elif [ -d "frontend" ] && [ -f "frontend/pubspec.yaml" ]; then
-            echo "Running pub get in frontend directory..."
-            cd frontend
-            flutter pub get
-          else
-            echo "⚠️ Notice: pubspec.yaml was not found in repo."
+          TARGET_DIR="${{ steps.detect.outputs.flutter_dir }}"
+          if [ "$TARGET_DIR" = "starter_app" ] && [ ! -d "starter_app" ]; then
             echo "Initializing NetGuard Flutter scaffold..."
             flutter create --project-name netguard_app --org com.netguard.router starter_app
-            cd starter_app
-            flutter pub get
           fi
+          echo "Running pub get in $TARGET_DIR..."
+          cd "$TARGET_DIR"
+          flutter pub get
 
       - name: Build Release APK
         if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
         run: |
-          if [ -f "pubspec.yaml" ]; then
-            flutter build apk --release
-          elif [ -d "frontend" ] && [ -f "frontend/pubspec.yaml" ]; then
-            cd frontend
-            flutter build apk --release
-          elif [ -d "starter_app" ]; then
-            cd starter_app
-            flutter build apk --release
-          fi
+          TARGET_DIR="${{ steps.detect.outputs.flutter_dir }}"
+          echo "Building Release APK in $TARGET_DIR..."
+          cd "$TARGET_DIR"
+          flutter build apk --release
 
       - name: Upload Release APK
         if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
         uses: actions/upload-artifact@v4
         with:
           name: NetGuard-Release-APK
-          path: '**/build/app/outputs/flutter-apk/app-release.apk'
+          path: '**/build/app/outputs/flutter-apk/*.apk'
           if-no-files-found: warn
 
       # ------------------ NODE.JS / WEB APP PIPELINE ------------------
