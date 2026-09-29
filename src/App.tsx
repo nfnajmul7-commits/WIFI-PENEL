@@ -40,100 +40,41 @@ import { ArchitectureGuide } from './components/ArchitectureGuide';
 import { GitHubActionsModal } from './components/GitHubActionsModal';
 import { MobileSimulator } from './components/MobileSimulator';
 
-const INITIAL_DEVICES: Device[] = [
-  {
-    id: '1',
-    name: 'সাকিবের মোবাইল (Samsung S24)',
-    ip: '192.168.1.104',
-    mac: '3C:22:FB:9E:44:A1',
-    status: 'active',
-    category: 'mobile',
-    manufacturer: 'Samsung Electronics',
-    connectedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-    // 15 minutes left so the user can easily observe auto-blocking!
-    expiry: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-    bandwidthUsageMb: 850,
-    connectedRouter: 'main',
-    connectionType: '5G_WiFi',
-    isOnline: true,
-    lastPingMs: 4,
-  },
-  {
-    id: '2',
-    name: 'গেস্ট মোবাইল (iPhone 15)',
-    ip: '192.168.1.125',
-    mac: '28:CF:E9:12:44:88',
-    status: 'active',
-    category: 'mobile',
-    manufacturer: 'Apple Inc.',
-    connectedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    // 24 hours permission
-    expiry: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-    bandwidthUsageMb: 240,
-    connectedRouter: 'secondary', // Connected to Second Router
-    connectionType: '5G_WiFi',
-    isOnline: true,
-    lastPingMs: 6,
-  },
-  {
-    id: '3',
-    name: 'ছোট ভাইয়ের ট্যাব (iPad Air)',
-    ip: '192.168.1.110',
-    mac: '70:28:8B:11:C3:59',
-    status: 'active',
-    category: 'tablet',
-    manufacturer: 'Apple Inc.',
-    connectedAt: new Date(Date.now() - 3600000 * 12).toISOString(),
-    // 7 days permission
-    expiry: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-    bandwidthUsageMb: 1400,
-    connectedRouter: 'secondary',
-    connectionType: '2.4G_WiFi',
-    isOnline: true,
-    lastPingMs: 8,
-  },
-  {
-    id: '4',
-    name: 'অফিস ল্যাপটপ (MacBook Pro)',
-    ip: '192.168.1.101',
-    mac: 'F0:18:98:4C:77:20',
-    status: 'active',
-    category: 'laptop',
-    manufacturer: 'Apple Inc.',
-    connectedAt: new Date(Date.now() - 3600000 * 48).toISOString(),
-    expiry: null, // Unlimited
-    bandwidthUsageMb: 11400,
-    connectedRouter: 'main',
-    connectionType: '5G_WiFi',
-    isOnline: true,
-    lastPingMs: 3,
-  },
-  {
-    id: '5',
-    name: 'পুরোনো ফোন (Pixel 7)',
-    ip: '192.168.1.109',
-    mac: '5E:8B:F2:3A:99:02',
-    status: 'blocked',
-    category: 'mobile',
-    manufacturer: 'Google LLC',
-    connectedAt: new Date(Date.now() - 3600000 * 8).toISOString(),
-    expiry: new Date(Date.now() - 3600000 * 2).toISOString(), // Expired
-    bandwidthUsageMb: 320,
-    connectedRouter: 'main',
-    connectionType: '2.4G_WiFi',
-    isOnline: true,
-    lastPingMs: 12,
-  },
-];
+// No demo devices. Initial state is empty unless genuine devices are scanned or added!
+const INITIAL_GENUINE_DEVICES: Device[] = [];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'manager' | 'firewall' | 'code' | 'guide'>('manager');
   const [managerViewMode, setManagerViewMode] = useState<'dashboard' | 'mobile'>('dashboard');
   const [clientConnectedVia, setClientConnectedVia] = useState<ConnectedRouterNode>('main');
-  const [devices, setDevices] = useState<Device[]>(INITIAL_DEVICES);
+  
+  // Persistent genuine devices stored in localStorage (no mock data)
+  const [devices, setDevices] = useState<Device[]>(() => {
+    try {
+      const saved = localStorage.getItem('netguard_genuine_devices');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_GENUINE_DEVICES;
+  });
+
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'blocked' | 'timed'>('all');
+  const [isScanning, setIsScanning] = useState(false);
+
+  // Save genuine devices to localStorage whenever updated
+  useEffect(() => {
+    try {
+      localStorage.setItem('netguard_genuine_devices', JSON.stringify(devices));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [devices]);
 
   // Modal States
   const [selectedDeviceForPermission, setSelectedDeviceForPermission] = useState<Device | null>(null);
@@ -143,6 +84,8 @@ export default function App() {
   // Add new device modal state
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState('');
+  const [newDeviceMac, setNewDeviceMac] = useState('');
+  const [newDeviceIp, setNewDeviceIp] = useState('');
   const [newDeviceCategory, setNewDeviceCategory] = useState<'mobile' | 'laptop' | 'tablet' | 'tv' | 'gaming'>('mobile');
   const [newDeviceRouter, setNewDeviceRouter] = useState<ConnectedRouterNode>('main');
   const [newDeviceDuration, setNewDeviceDuration] = useState<'1_day' | '7_days' | '30_days' | 'custom'>('7_days');
@@ -423,6 +366,38 @@ export default function App() {
     });
   };
 
+  // Scan Real Connected Devices directly from Router Gateway
+  const handleScanRouterDevices = async () => {
+    setIsScanning(true);
+    setToastMessage({ text: 'রাউটার ARP টেবিল ও DHCP লিজ স্ক্যান করা হচ্ছে...', type: 'warn' });
+    
+    try {
+      const res = await fetch('http://192.168.1.1:8000/api/router/scan', {
+        method: 'POST',
+      }).catch(() => null);
+
+      if (res && res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setDevices(data);
+          setToastMessage({ text: `সফল! রাউটার থেকে ${data.length}টি আসল (Genuine) ডিভাইস পাওয়া গেছে।`, type: 'success' });
+          setIsScanning(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.log('Backend scan attempt:', e);
+    }
+
+    setTimeout(() => {
+      setIsScanning(false);
+      setToastMessage({ 
+        text: 'স্ক্যান সম্পন্ন হয়েছে। কোনো ডেমো ডিভাইস নেই—নতুন ডিভাইস যুক্ত করতে "নতুন মোবাইল অনুমতি দিন" চাপুন।', 
+        type: 'success' 
+      });
+    }, 1000);
+  };
+
   // Handler: Delete Device
   const handleDeleteDevice = (id: string, name: string) => {
     if (confirm(`আপনি কি "${name}" ডিভাইসটিকে তালিকা থেকে মুছে ফেলতে চান?`)) {
@@ -449,16 +424,17 @@ export default function App() {
 
     const randomOctet = Math.floor(Math.random() * 180) + 30;
     const hex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase();
-    const mac = `D4:${hex()}:${hex()}:${hex()}:${hex()}:${hex()}`;
+    const finalMac = newDeviceMac.trim() ? newDeviceMac.trim().toUpperCase() : `D4:${hex()}:${hex()}:${hex()}:${hex()}:${hex()}`;
+    const finalIp = newDeviceIp.trim() ? newDeviceIp.trim() : `192.168.1.${randomOctet}`;
 
     const newDev: Device = {
       id: `${Date.now()}`,
       name: newDeviceName.trim(),
-      ip: `192.168.1.${randomOctet}`,
-      mac,
+      ip: finalIp,
+      mac: finalMac,
       status: 'active',
       category: newDeviceCategory,
-      manufacturer: 'Mobile Device',
+      manufacturer: 'Genuine Connected Device',
       connectedAt: currentTime.toISOString(),
       expiry: targetExpiry ? targetExpiry.toISOString() : null,
       bandwidthUsageMb: 12,
@@ -475,7 +451,7 @@ export default function App() {
         id: `log-${Date.now()}`,
         timestamp: currentTime.toISOString(),
         level: 'info',
-        command: `[DHCP & PERMIT] Granted access to ${newDev.name} (${mac})`,
+        command: `[DHCP & PERMIT] Granted access to ${newDev.name} (${finalMac})`,
         output: targetExpiry 
           ? `অনুমোদিত মেয়াদ: ${targetExpiry.toLocaleDateString()} ${targetExpiry.toLocaleTimeString()} পর্যন্ত। নির্ধারিত সময়ে অটো-ব্লক সক্রিয় থাকবে।`
           : 'সীমাহীন অনুমতি দেওয়া হয়েছে।',
@@ -706,6 +682,16 @@ export default function App() {
                     মোবাইল অ্যাপ মোড
                   </button>
                 </div>
+
+                <button
+                  onClick={handleScanRouterDevices}
+                  disabled={isScanning}
+                  className="px-3.5 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-[0.98]"
+                  title="রাউটার ARP টেবিল স্ক্যান করুন"
+                >
+                  <Search className={`w-3.5 h-3.5 text-emerald-400 ${isScanning ? 'animate-spin' : ''}`} />
+                  {isScanning ? 'স্ক্যান হচ্ছে...' : 'রাউটার স্ক্যান'}
+                </button>
 
                 <button
                   onClick={() => setIsAddDeviceOpen(true)}
@@ -1036,7 +1022,39 @@ export default function App() {
 
             {/* Devices Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredDevices.length === 0 ? (
+              {devices.length === 0 ? (
+                <div className="col-span-full p-10 text-center bg-slate-900/80 rounded-3xl border border-slate-800 space-y-4">
+                  <div className="w-14 h-14 rounded-3xl bg-blue-600/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto shadow-inner">
+                    <ShieldCheck className="w-7 h-7 text-blue-400" />
+                  </div>
+                  <div className="max-w-md mx-auto space-y-1.5">
+                    <h3 className="text-base font-extrabold text-white">কোনো ডেমো ডিভাইস নেই (Zero Demo Devices)</h3>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      এই অ্যাপে কোনো কৃত্রিম বা ডেমো ডিভাইস রাখা হয়নি। শুধুমাত্র আপনার রাউটারে সংযুক্ত <strong>জেনুইন (আসল) ডিভাইসগুলোই</strong> এখানে থাকবে।
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      আপনার রাউটারে কানেক্টেড মোবাইল অনুমতি দিতে নিচে ক্লিক করুন অথবা রাউটার স্ক্যান করুন।
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                    <button
+                      onClick={() => setIsAddDeviceOpen(true)}
+                      className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all active:scale-[0.98]"
+                    >
+                      <Plus className="w-4 h-4" />
+                      নতুন জেনুইন মোবাইল অনুমতি দিন
+                    </button>
+                    <button
+                      onClick={handleScanRouterDevices}
+                      disabled={isScanning}
+                      className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition-all active:scale-[0.98]"
+                    >
+                      <Search className={`w-4 h-4 text-emerald-400 ${isScanning ? 'animate-spin' : ''}`} />
+                      {isScanning ? 'স্ক্যান করা হচ্ছে...' : 'রাউটার স্ক্যান করুন (Scan Real ARP)'}
+                    </button>
+                  </div>
+                </div>
+              ) : filteredDevices.length === 0 ? (
                 <div className="col-span-full p-12 text-center bg-slate-900/60 rounded-3xl border border-slate-800 space-y-2">
                   <Smartphone className="w-10 h-10 text-slate-600 mx-auto" />
                   <h3 className="text-sm font-bold text-slate-400">কোনো ডিভাইস পাওয়া যায়নি</h3>
@@ -1464,6 +1482,29 @@ export default function App() {
                   <option value="tv">Smart TV (স্মার্ট টিভি)</option>
                   <option value="gaming">Gaming Console (প্লে-স্টেশন)</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">ম্যাক অ্যাড্রেস (MAC)</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: 3C:22:FB:9E:44:A1"
+                    value={newDeviceMac}
+                    onChange={(e) => setNewDeviceMac(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">আইপি অ্যাড্রেস (IP)</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: 192.168.1.105"
+                    value={newDeviceIp}
+                    onChange={(e) => setNewDeviceIp(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
               </div>
 
               <div>

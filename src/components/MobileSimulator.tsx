@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Wifi, 
   ShieldAlert, 
+  ShieldCheck,
   Clock, 
   Smartphone, 
   Laptop, 
@@ -329,8 +330,9 @@ export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {filteredDevices.length === 0 ? (
                   <div className="h-44 flex flex-col items-center justify-center text-center p-4 text-slate-500">
-                    <ShieldAlert className="w-8 h-8 mb-2 stroke-1" />
-                    <p className="text-xs">No devices found in this filter.</p>
+                    <ShieldCheck className="w-8 h-8 mb-2 text-blue-400 stroke-1" />
+                    <p className="text-xs font-bold text-slate-300">কোনো ডেমো ডিভাইস নেই</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">শুধুমাত্র রাউটারে সংযুক্ত আসল (Genuine) ডিভাইস দেখাবে।</p>
                   </div>
                 ) : (
                   filteredDevices.map((device) => {

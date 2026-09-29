@@ -203,7 +203,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             else if (filteredDevices.isEmpty)
               const SliverFillRemaining(
                 child: Center(
-                  child: Text('কোনো ডিভাইস পাওয়া যায়নি', style: TextStyle(color: Colors.grey)),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.shield, size: 48, color: Color(0xFF3B82F6)),
+                      SizedBox(height: 12),
+                      Text(
+                        'কোনো ডেমো ডিভাইস নেই',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'শুধুমাত্র আপনার রাউটারে সংযুক্ত জেনুইন ডিভাইসগুলো এখানে প্রদর্শিত হবে।',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
               )
             else
