@@ -1,6 +1,22 @@
 export type DeviceStatus = 'active' | 'blocked';
 export type ConnectedRouterNode = 'main' | 'secondary';
 
+export interface ConnectedDeviceHistoryItem {
+  id: string;
+  mac: string;
+  ip: string;
+  name: string;
+  category: 'mobile' | 'laptop' | 'tv' | 'gaming' | 'iot' | 'tablet';
+  manufacturer: string;
+  firstSeen: string;
+  lastSeen: string;
+  connectionCount: number;
+  lastRouter: ConnectedRouterNode;
+  isOnlineNow: boolean;
+  currentStatus: DeviceStatus | 'disconnected';
+  expiry?: string | null;
+}
+
 export interface Device {
   id: string;
   name: string;

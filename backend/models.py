@@ -40,3 +40,18 @@ class AuditLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     device = relationship("Device", back_populates="logs")
+
+
+class ConnectionHistory(Base):
+    __tablename__ = "connection_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mac = Column(String(17), nullable=False, unique=True, index=True)
+    ip = Column(String(45), nullable=False)
+    name = Column(String(100), nullable=False)
+    category = Column(String(50), default="mobile")
+    manufacturer = Column(String(100), default="Connected Device")
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    connection_count = Column(Integer, default=1)
+

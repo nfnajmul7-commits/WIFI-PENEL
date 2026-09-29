@@ -362,6 +362,215 @@ def scan_and_sync_real_devices(db: Session = Depends(get_db)):
     return [schemas.DeviceResponse.model_validate(dev) for dev in all_devices]
 
 
+def clean_mac_address(mac_raw: str) -> str:
+    """Normalize MAC address into XX:XX:XX:XX:XX:XX format."""
+    cleaned = "".join(c for c in mac_raw if c.isalnum()).upper()
+    if len(cleaned) == 12:
+        return ":".join(cleaned[i:i+2] for i in range(0, 12, 2))
+    return mac_raw.upper().strip()
+
+
+@app.post("/api/devices/quick-add", response_model=schemas.DeviceResponse, status_code=201, tags=["Devices"])
+def quick_add_device_by_mac_only(payload: schemas.QuickAddRequest, db: Session = Depends(get_db)):
+    """
+    Add/permit a device with ONLY the MAC address.
+    Name and IP are automatically resolved from connection history or router ARP.
+    Time validity can be set simultaneously.
+    """
+    mac = clean_mac_address(payload.mac)
+    if len(mac) < 11 or ":" not in mac:
+        raise HTTPException(status_code=400, detail="Invalid MAC address format. Example: 3C:22:FB:9E:44:A1")
+
+    # Check if already in active devices
+    device = db.query(models.Device).filter(models.Device.mac == mac).first()
+    
+    # Check history or ARP table for existing metadata
+    hist = db.query(models.ConnectionHistory).filter(models.ConnectionHistory.mac == mac).first()
+    
+    # Determine IP
+    ip = payload.ip or (hist.ip if hist else None)
+    if not ip:
+        # Check router ARP/DHCP driver
+        scanned = router_driver.scan_real_connected_devices()
+        for s in scanned:
+            if s["mac"].upper() == mac:
+                ip = s["ip"]
+                break
+    if not ip:
+        # Fallback allocation
+        ip = f"192.168.1.{abs(hash(mac)) % 150 + 50}"
+
+    # Determine Name
+    name = payload.name or (hist.name if hist else None)
+    if not name:
+        name = f"মোবাইল ({mac[-8:]})"
+
+    # Calculate expiry
+    target_expiry = None
+    now = datetime.utcnow()
+    if payload.duration == "1_day":
+        target_expiry = now + timedelta(days=1)
+    elif payload.duration == "7_days":
+        target_expiry = now + timedelta(days=7)
+    elif payload.duration == "15_days":
+        target_expiry = now + timedelta(days=15)
+    elif payload.duration == "30_days":
+        target_expiry = now + timedelta(days=30)
+    elif payload.duration == "custom" and payload.custom_expiry:
+        try:
+            target_expiry = datetime.fromisoformat(payload.custom_expiry.replace("Z", ""))
+        except Exception:
+            target_expiry = now + timedelta(days=7)
+
+    if device:
+        # Device exists; update time and activate
+        device.expiry = target_expiry
+        if device.status == "blocked":
+            router_driver.unblock_mac(device.mac, device.ip)
+            device.status = "active"
+        if payload.name:
+            device.name = payload.name
+        if payload.ip:
+            device.ip = payload.ip
+    else:
+        device = models.Device(
+            name=name,
+            ip=ip,
+            mac=mac,
+            category="mobile",
+            manufacturer=hist.manufacturer if hist else "Connected Device",
+            status="active",
+            expiry=target_expiry
+        )
+        db.add(device)
+
+    # Sync to history
+    if hist:
+        hist.last_seen = now
+        hist.connection_count += 1
+    else:
+        hist = models.ConnectionHistory(
+            mac=mac,
+            ip=ip,
+            name=name,
+            category="mobile",
+            manufacturer="Connected Device",
+            first_seen=now,
+            last_seen=now,
+            connection_count=1
+        )
+        db.add(hist)
+
+    db.commit()
+    db.refresh(device)
+    return schemas.DeviceResponse.model_validate(device)
+
+
+@app.get("/api/history", response_model=List[schemas.ConnectionHistoryResponse], tags=["History"])
+def get_connection_history(db: Session = Depends(get_db)):
+    """
+    Returns all devices that have previously connected to this router.
+    Scans router ARP and DHCP cache to discover any past connected devices.
+    """
+    # Sync with current ARP/DHCP lease table to ensure all discovered clients are in history
+    scanned_clients = router_driver.scan_real_connected_devices()
+    now = datetime.utcnow()
+
+    for client in scanned_clients:
+        mac = client["mac"].upper()
+        existing_hist = db.query(models.ConnectionHistory).filter(models.ConnectionHistory.mac == mac).first()
+        if not existing_hist:
+            db.add(models.ConnectionHistory(
+                mac=mac,
+                ip=client["ip"],
+                name=client.get("name", f"Device-{client['ip'].split('.')[-1]}"),
+                category=client.get("category", "mobile"),
+                manufacturer=client.get("manufacturer", "Connected Device"),
+                first_seen=now,
+                last_seen=now,
+                connection_count=1
+            ))
+        else:
+            existing_hist.last_seen = now
+            if existing_hist.ip != client["ip"]:
+                existing_hist.ip = client["ip"]
+    
+    db.commit()
+
+    # Query all history entries
+    history_records = db.query(models.ConnectionHistory).order_by(models.ConnectionHistory.last_seen.desc()).all()
+    devices_map = {d.mac: d for d in db.query(models.Device).all()}
+
+    results = []
+    for h in history_records:
+        dev = devices_map.get(h.mac)
+        results.append(schemas.ConnectionHistoryResponse(
+            id=h.id,
+            mac=h.mac,
+            ip=h.ip,
+            name=h.name,
+            category=h.category,
+            manufacturer=h.manufacturer,
+            first_seen=h.first_seen,
+            last_seen=h.last_seen,
+            connection_count=h.connection_count,
+            current_status=dev.status if dev else "disconnected",
+            is_currently_managed=dev is not None,
+            expiry=dev.expiry if dev else None
+        ))
+
+    return results
+
+
+@app.post("/api/history/{history_id}/setup-time", response_model=schemas.DeviceResponse, tags=["History"])
+def setup_time_for_past_device(
+    history_id: int,
+    payload: schemas.ScheduleRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Configure time schedule/permission for a device from the connection history.
+    Promotes it to active management and enforces auto-blocking upon expiry.
+    """
+    hist = db.query(models.ConnectionHistory).filter(models.ConnectionHistory.id == history_id).first()
+    if not hist:
+        raise HTTPException(status_code=404, detail="History record not found")
+
+    target_expiry = payload.calculate_expiry_datetime()
+    if target_expiry <= datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Expiry datetime must be in the future")
+
+    device = db.query(models.Device).filter(models.Device.mac == hist.mac).first()
+    if not device:
+        device = models.Device(
+            name=hist.name,
+            ip=hist.ip,
+            mac=hist.mac,
+            category=hist.category,
+            manufacturer=hist.manufacturer,
+            status="active",
+            expiry=target_expiry
+        )
+        db.add(device)
+    else:
+        device.expiry = target_expiry
+        if device.status == "blocked":
+            router_driver.unblock_mac(device.mac, device.ip)
+            device.status = "active"
+
+    db.add(models.AuditLog(
+        device_id=device.id,
+        mac=device.mac,
+        action="schedule_set_from_history",
+        details=f"Configured validity expiry until {target_expiry} from connection history",
+        timestamp=datetime.utcnow()
+    ))
+
+    db.commit()
+    db.refresh(device)
+    return schemas.DeviceResponse.model_validate(device)
+
+
 @app.delete("/api/devices/{device_id}", tags=["Devices"])
 def delete_device(device_id: int, db: Session = Depends(get_db)):
     """

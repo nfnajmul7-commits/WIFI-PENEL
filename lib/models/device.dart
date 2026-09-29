@@ -92,3 +92,51 @@ class Device {
     };
   }
 }
+
+class ConnectionHistoryItem {
+  final int id;
+  final String mac;
+  final String ip;
+  final String name;
+  final String category;
+  final String manufacturer;
+  final DateTime firstSeen;
+  final DateTime lastSeen;
+  final int connectionCount;
+  final String currentStatus;
+  final bool isCurrentlyManaged;
+  final DateTime? expiry;
+
+  ConnectionHistoryItem({
+    required this.id,
+    required this.mac,
+    required this.ip,
+    required this.name,
+    required this.category,
+    required this.manufacturer,
+    required this.firstSeen,
+    required this.lastSeen,
+    required this.connectionCount,
+    required this.currentStatus,
+    required this.isCurrentlyManaged,
+    this.expiry,
+  });
+
+  factory ConnectionHistoryItem.fromJson(Map<String, dynamic> json) {
+    return ConnectionHistoryItem(
+      id: json['id'],
+      mac: json['mac'] ?? '',
+      ip: json['ip'] ?? '',
+      name: json['name'] ?? 'Unknown',
+      category: json['category'] ?? 'mobile',
+      manufacturer: json['manufacturer'] ?? 'Connected Device',
+      firstSeen: DateTime.parse(json['first_seen']),
+      lastSeen: DateTime.parse(json['last_seen']),
+      connectionCount: json['connection_count'] ?? 1,
+      currentStatus: json['current_status'] ?? 'disconnected',
+      isCurrentlyManaged: json['is_currently_managed'] ?? false,
+      expiry: json['expiry'] != null ? DateTime.parse(json['expiry']) : null,
+    );
+  }
+}
+

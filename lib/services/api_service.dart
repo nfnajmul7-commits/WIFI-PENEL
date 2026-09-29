@@ -101,4 +101,68 @@ class ApiService {
     }
     throw Exception('Failed to load router status');
   }
+
+  static Future<Device> quickAddByMac({
+    required String mac,
+    String? name,
+    String? ip,
+    String duration = '7_days',
+    String? customExpiry,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/devices/quick-add');
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'mac': mac,
+        'name': name,
+        'ip': ip,
+        'duration': duration,
+        'custom_expiry': customExpiry,
+      }),
+    );
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      return Device.fromJson(jsonDecode(response.body));
+    } else {
+      final err = jsonDecode(response.body);
+      throw Exception(err['detail'] ?? 'Failed to add device by MAC');
+    }
+  }
+
+  static Future<List<ConnectionHistoryItem>> getConnectionHistory() async {
+    final url = Uri.parse('$baseUrl/api/history');
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      final List<dynamic> body = jsonDecode(response.body);
+      return body.map((item) => ConnectionHistoryItem.fromJson(item)).toList();
+    } else {
+      throw Exception('Failed to load connection history');
+    }
+  }
+
+  static Future<Device> setupTimeForHistoryDevice(
+    int historyId, {
+    String? presetDuration,
+    String? customDateTime,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/history/$historyId/setup-time');
+    final payload = <String, dynamic>{};
+    if (presetDuration != null) payload['preset_duration'] = presetDuration;
+    if (customDateTime != null) payload['custom_datetime'] = customDateTime;
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      return Device.fromJson(jsonDecode(response.body));
+    } else {
+      final err = jsonDecode(response.body);
+      throw Exception(err['detail'] ?? 'Failed to set time for history device');
+    }
+  }
 }
+

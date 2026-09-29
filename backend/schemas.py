@@ -60,6 +60,36 @@ class ScheduleRequest(BaseModel):
         return now + timedelta(days=1)
 
 
+class QuickAddRequest(BaseModel):
+    """
+    Allows adding a device with ONLY the MAC address.
+    Name and IP will be automatically derived or fetched from ARP/DHCP lease table.
+    """
+    mac: str = Field(..., description="Device MAC address e.g. 'AA:BB:CC:DD:EE:FF'")
+    name: Optional[str] = Field(None, description="Optional custom device name")
+    ip: Optional[str] = Field(None, description="Optional IP address")
+    duration: Optional[str] = Field("7_days", description="'1_day' | '7_days' | '15_days' | '30_days' | 'custom' | 'unlimited'")
+    custom_expiry: Optional[str] = Field(None, description="Optional custom expiry datetime string")
+
+
+class ConnectionHistoryResponse(BaseModel):
+    id: int
+    mac: str
+    ip: str
+    name: str
+    category: str
+    manufacturer: str
+    first_seen: datetime
+    last_seen: datetime
+    connection_count: int
+    current_status: str
+    is_currently_managed: bool
+    expiry: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class DeviceBase(BaseModel):
     name: str
     ip: str
