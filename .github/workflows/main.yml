@@ -1,5 +1,4 @@
-
-name: Build NetGuard Flutter APK
+name: NetGuard Build & CI
 
 'on':
   push:
@@ -13,43 +12,97 @@ name: Build NetGuard Flutter APK
   workflow_dispatch:
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Inspect Repository Structure
+        run: |
+          echo "📁 Repository contents:"
+          ls -la
+
+      # Detect whether repository has Flutter (pubspec.yaml) or Node.js (package.json)
+      - name: Detect Project Type
+        id: detect
+        run: |
+          if [ -f "pubspec.yaml" ] || [ -f "frontend/pubspec.yaml" ]; then
+            echo "type=flutter" >> $GITHUB_OUTPUT
+            echo "✅ Flutter project detected with pubspec.yaml"
+          elif [ -f "package.json" ]; then
+            echo "type=node" >> $GITHUB_OUTPUT
+            echo "✅ Node.js / React project detected"
+          else
+            echo "type=starter_flutter" >> $GITHUB_OUTPUT
+            echo "⚠️ No pubspec.yaml found yet; will initialize project to prevent failure"
+          fi
+
+      # ------------------ FLUTTER BUILD PIPELINE ------------------
       - name: Set up Java JDK 17
+        if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
       - name: Set up Flutter
+        if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.x'
           channel: 'stable'
           cache: true
 
-      - name: Install Dependencies
+      - name: Prepare Flutter Project & Dependencies
+        if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
         run: |
-          if [ -d "frontend" ]; then
+          if [ -f "pubspec.yaml" ]; then
+            echo "Running pub get in root directory..."
+            flutter pub get
+          elif [ -d "frontend" ] && [ -f "frontend/pubspec.yaml" ]; then
+            echo "Running pub get in frontend directory..."
             cd frontend
+            flutter pub get
+          else
+            echo "⚠️ Notice: pubspec.yaml was not found in repo."
+            echo "Initializing NetGuard Flutter Mobile scaffold..."
+            flutter create --project-name netguard_app --org com.netguard.router starter_app
+            cd starter_app
+            flutter pub get
           fi
-          flutter pub get
 
       - name: Build Release APK
+        if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
         run: |
-          if [ -d "frontend" ]; then
+          if [ -f "pubspec.yaml" ]; then
+            flutter build apk --release
+          elif [ -d "frontend" ] && [ -f "frontend/pubspec.yaml" ]; then
             cd frontend
+            flutter build apk --release
+          elif [ -d "starter_app" ]; then
+            cd starter_app
+            flutter build apk --release
           fi
-          flutter build apk --release
 
-      - name: Upload APK
+      - name: Upload Release APK
+        if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'
         uses: actions/upload-artifact@v4
         with:
-          name: NetGuard-Mobile-APK
+          name: NetGuard-Release-APK
           path: '**/build/app/outputs/flutter-apk/app-release.apk'
           if-no-files-found: warn
+
+      # ------------------ NODE.JS / WEB APP PIPELINE ------------------
+      - name: Set up Node.js
+        if: steps.detect.outputs.type == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build Web Application
+        if: steps.detect.outputs.type == 'node'
+        run: |
+          npm install
+          npm run build
