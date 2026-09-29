@@ -128,8 +128,16 @@ jobs:
       - name: Build Web Application
         if: steps.detect.outputs.type == 'node'
         run: |
-          npm install
+          npm install --legacy-peer-deps
           npm run build
+
+      - name: Upload Web Build Artifact
+        if: steps.detect.outputs.type == 'node'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetGuard-Web-Build
+          path: dist/
+          if-no-files-found: warn
 `;
 
   const fastapiYaml = `name: FastAPI Backend CI
@@ -215,14 +223,17 @@ jobs:
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Screenshot Error Analysis */}
-          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 space-y-2">
-            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+          <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/40 space-y-2">
+            <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>আপনার স্ক্রিনশটের এরর: "Expected to find project root in current working directory"</span>
+              <span>আপনার স্ক্রিনশটের এরর: "Conflicting peer dependency: esbuild / vite"</span>
             </div>
-            <p className="text-xs text-amber-200/90 leading-relaxed">
-              <strong>এররের কারণ:</strong> আপনার গিটহাব রিপোজিটরি <code className="bg-slate-950 px-1 py-0.5 rounded text-white font-mono">WIFI-PENEL</code> এর মধ্যে এখনো কোনো <code className="bg-slate-950 px-1 py-0.5 rounded text-emerald-300 font-mono">pubspec.yaml</code> ফাইল নেই। যখন <code className="text-white font-mono">flutter pub get</code> চালানো হয়, তখন সে প্রজেক্টের মূল ফাইল (pubspec.yaml) না পেয়ে এই এরর দিয়ে থেমে যায়।
+            <p className="text-xs text-rose-200/90 leading-relaxed">
+              <strong>এররের কারণ:</strong> npm ডিফল্টভাবে অতিরিক্ত কড়া ডিপেন্ডেন্সি চেক করে। <code className="bg-slate-950 px-1 py-0.5 rounded text-white font-mono">npm install</code> এর সাথে <code className="bg-slate-950 px-1 py-0.5 rounded text-emerald-300 font-mono">--legacy-peer-deps</code> ফ্ল্যাগ না দিলে Vite এবং esbuild এর ভার্সন নিয়ে এই এরর দেখায়।
             </p>
+            <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] font-mono text-emerald-300">
+              ✅ সমাধান: npm install ➔ <strong>npm install --legacy-peer-deps</strong>
+            </div>
           </div>
 
           {/* How this new smart code solves it */}
