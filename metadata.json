@@ -1,0 +1,6 @@
+{
+  "name": "NetGuard - Router Manager & Device Time-Blocker",
+  "description": "Full-stack mobile router management and automatic device time-blocking system with FastAPI backend and Flutter client.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
