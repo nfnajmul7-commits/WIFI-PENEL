@@ -29,6 +29,7 @@ import { RouterTerminal } from './components/RouterTerminal';
 import { CodeExplorer } from './components/CodeExplorer';
 import { ApiPlayground } from './components/ApiPlayground';
 import { ArchitectureGuide } from './components/ArchitectureGuide';
+import { GitHubActionsModal } from './components/GitHubActionsModal';
 
 const INITIAL_DEVICES: Device[] = [
   {
@@ -134,6 +135,7 @@ export default function App() {
   const [devices, setDevices] = useState<Device[]>(INITIAL_DEVICES);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [clientConnectedVia, setClientConnectedVia] = useState<ConnectedRouterNode>('secondary'); // Start connected via 2nd Router to demonstrate user requirement!
+  const [isGithubModalOpen, setIsGithubModalOpen] = useState(false);
 
   const [logs, setLogs] = useState<RouterLog[]>([
     {
@@ -458,12 +460,50 @@ export default function App() {
               <Send className="w-3.5 h-3.5" />
               API টেস্ট
             </button>
+
+            <button
+              onClick={() => setIsGithubModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md hover:from-purple-500 hover:to-indigo-500 transition-all border border-purple-400/40 animate-pulse"
+              title="GitHub Actions এক্টিভেশন সমাধান"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+              Actions এক্টিভেশন গাইড
+            </button>
           </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 space-y-4">
+        {/* Urgent GitHub Actions Troubleshooting Banner for User's Uploaded Screenshot */}
+        <div 
+          onClick={() => setIsGithubModalOpen(true)}
+          className="bg-gradient-to-r from-purple-950/80 via-slate-900 to-blue-950/80 border border-purple-500/40 hover:border-purple-400 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg cursor-pointer transition-all hover:bg-slate-900 group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 group-hover:scale-105 transition-transform">
+              <Sparkles className="w-5 h-5 text-purple-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white">
+                  আপনার রিপোজিটরির (<span className="text-purple-300 font-mono">WIFI-PENEL</span>) GitHub Actions এক্টিভ হচ্ছে না?
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+                  সমাধান প্রস্তুত
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                স্ক্রিনশটে প্রদর্শিত "Get started with GitHub Actions" সমস্যার ৪টি সহজ ধাপ ও সম্পূর্ণ প্রস্তুত YAML কোড পেতে এখানে ক্লিক করুন।
+              </p>
+            </div>
+          </div>
+
+          <button className="px-3.5 py-1.5 rounded-xl bg-purple-600 group-hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-md">
+            <span>এক ক্লিকে সমাধান দেখুন</span>
+            <span className="text-base leading-none">➔</span>
+          </button>
+        </div>
         {/* TAB 1: LIVE SIMULATOR */}
         {activeTab === 'simulator' && (
           <div className="space-y-4">
@@ -586,6 +626,12 @@ export default function App() {
           NetGuard Multi-Router Management System • Main Gateway + Second Router AP • FastAPI + Flutter + iptables
         </p>
       </footer>
+
+      {/* GitHub Actions Setup & Resolution Modal */}
+      <GitHubActionsModal
+        isOpen={isGithubModalOpen}
+        onClose={() => setIsGithubModalOpen(false)}
+      />
     </div>
   );
 }

@@ -1981,5 +1981,102 @@ flutter run
    /etc/init.d/firewall reload
    \`\`\`
 `
+  },
+  {
+    name: 'flutter-apk.yml',
+    path: '.github/workflows/flutter-apk.yml',
+    category: 'docs',
+    language: 'yaml',
+    description: 'GitHub Actions workflow to automatically build and export Flutter release APK on push',
+    content: `name: Build NetGuard Flutter APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter Installation
+        run: flutter doctor -v
+
+      - name: Install Dependencies
+        run: |
+          cd frontend || cd .
+          flutter pub get
+
+      - name: Build Release APK
+        run: |
+          cd frontend || cd .
+          flutter build apk --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetGuard-Release-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+`
+  },
+  {
+    name: 'fastapi-backend.yml',
+    path: '.github/workflows/fastapi.yml',
+    category: 'docs',
+    language: 'yaml',
+    description: 'GitHub Actions workflow to test and validate FastAPI backend python code',
+    content: `name: FastAPI Backend CI & Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          cd backend || cd .
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Test FastAPI Syntax & Import
+        run: |
+          cd backend || cd .
+          python -c "import main; print('FastAPI loaded successfully!')"
+`
   }
 ];
