@@ -19,11 +19,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Inspect Repository Structure
-        run: |
-          echo "📁 Repository contents:"
-          ls -la
-
       # Detect whether repository has Flutter (pubspec.yaml) or Node.js (package.json)
       - name: Detect Project Type
         id: detect
@@ -36,7 +31,7 @@ jobs:
             echo "✅ Node.js / React project detected"
           else
             echo "type=starter_flutter" >> $GITHUB_OUTPUT
-            echo "⚠️ No pubspec.yaml found yet; will initialize project to prevent failure"
+            echo "⚠️ No pubspec.yaml found yet; will auto-initialize to prevent failure"
           fi
 
       # ------------------ FLUTTER BUILD PIPELINE ------------------
@@ -67,7 +62,7 @@ jobs:
             flutter pub get
           else
             echo "⚠️ Notice: pubspec.yaml was not found in repo."
-            echo "Initializing NetGuard Flutter Mobile scaffold..."
+            echo "Initializing NetGuard Flutter scaffold..."
             flutter create --project-name netguard_app --org com.netguard.router starter_app
             cd starter_app
             flutter pub get
