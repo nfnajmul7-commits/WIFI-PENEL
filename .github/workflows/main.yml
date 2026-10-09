@@ -64,13 +64,13 @@ jobs:
             mkdir -p "$wrapper_dir"
             wrapper_file="$wrapper_dir/gradle-wrapper.properties"
             echo "Writing Gradle 8.5 wrapper to $wrapper_file"
-            cat << 'EOF' > "$wrapper_file"
-distributionBase=GRADLE_USER_HOME
-distributionPath=wrapper/dists
-zipStoreBase=GRADLE_USER_HOME
-zipStorePath=wrapper/dists
-distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-all.zip
-EOF
+            printf "%s\n" \
+              "distributionBase=GRADLE_USER_HOME" \
+              "distributionPath=wrapper/dists" \
+              "zipStoreBase=GRADLE_USER_HOME" \
+              "zipStorePath=wrapper/dists" \
+              "distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-all.zip" \
+              > "$wrapper_file"
           done
 
           # Replace old gradle versions (< 8.4) in any other gradle-wrapper.properties
