@@ -43,6 +43,7 @@ class DeviceCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Icon Avatar
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -59,6 +60,7 @@ class DeviceCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 14),
 
+                // Name and Network Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,6 +79,7 @@ class DeviceCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          // Live Status Pill
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
@@ -129,6 +132,7 @@ class DeviceCard extends StatelessWidget {
               ],
             ),
 
+            // Expiry / Countdown row if scheduled
             if (device.hasExpiry) ...[
               const SizedBox(height: 12),
               Container(
@@ -166,6 +170,7 @@ class DeviceCard extends StatelessWidget {
             const Divider(color: Color(0xFF334155), height: 1),
             const SizedBox(height: 12),
 
+            // Action Buttons
             Row(
               children: [
                 Expanded(

@@ -23,19 +23,29 @@ jobs:
       - name: Detect Project Type
         id: detect
         run: |
-          FLUTTER_FILE=$(find . -name "pubspec.yaml" -not -path "*/.*" -not -path "*/starter_app/*" | head -n 1)
-          if [ -n "$FLUTTER_FILE" ]; then
-            FLUTTER_DIR=$(dirname "$FLUTTER_FILE")
+          if [ -f "pubspec.yaml" ] && [ -d "android" ]; then
             echo "type=flutter" >> $GITHUB_OUTPUT
-            echo "flutter_dir=$FLUTTER_DIR" >> $GITHUB_OUTPUT
-            echo "✅ Flutter project detected in: $FLUTTER_DIR"
-          elif [ -f "package.json" ]; then
-            echo "type=node" >> $GITHUB_OUTPUT
-            echo "✅ Node.js / React project detected"
+            echo "flutter_dir=." >> $GITHUB_OUTPUT
+            echo "✅ Flutter project detected in root: ."
+          elif [ -f "frontend/pubspec.yaml" ] && [ -d "frontend/android" ]; then
+            echo "type=flutter" >> $GITHUB_OUTPUT
+            echo "flutter_dir=frontend" >> $GITHUB_OUTPUT
+            echo "✅ Flutter project detected in: frontend"
           else
-            echo "type=starter_flutter" >> $GITHUB_OUTPUT
-            echo "flutter_dir=starter_app" >> $GITHUB_OUTPUT
-            echo "⚠️ No pubspec.yaml found yet; will auto-initialize to prevent failure"
+            FLUTTER_FILE=$(find . -name "pubspec.yaml" -not -path "*/.*" -not -path "*/starter_app/*" | head -n 1)
+            if [ -n "$FLUTTER_FILE" ]; then
+              FLUTTER_DIR=$(dirname "$FLUTTER_FILE")
+              echo "type=flutter" >> $GITHUB_OUTPUT
+              echo "flutter_dir=$FLUTTER_DIR" >> $GITHUB_OUTPUT
+              echo "✅ Flutter project detected in: $FLUTTER_DIR"
+            elif [ -f "package.json" ]; then
+              echo "type=node" >> $GITHUB_OUTPUT
+              echo "✅ Node.js / React project detected"
+            else
+              echo "type=starter_flutter" >> $GITHUB_OUTPUT
+              echo "flutter_dir=starter_app" >> $GITHUB_OUTPUT
+              echo "⚠️ No pubspec.yaml found yet; will auto-initialize to prevent failure"
+            fi
           fi
 
       # ------------------ FLUTTER BUILD PIPELINE ------------------
@@ -95,7 +105,7 @@ jobs:
           TARGET_DIR="${{ steps.detect.outputs.flutter_dir }}"
           echo "Building Release APK in $TARGET_DIR..."
           cd "$TARGET_DIR"
-          flutter build apk --release
+          flutter build apk --release --no-tree-shake-icons
 
       - name: Upload Release APK
         if: steps.detect.outputs.type == 'flutter' || steps.detect.outputs.type == 'starter_flutter'

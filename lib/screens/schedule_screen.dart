@@ -42,7 +42,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       context: context,
       initialDate: _customDateTime ?? now.add(const Duration(days: 1)),
       firstDate: now,
-      lastDate: now.add(const Duration(days: 60)),
+      lastDate: now.add(const Duration(days: 60)), // Up to 2 months
       builder: (context, child) {
         return Theme(
           data: ThemeData.dark().copyWith(
@@ -161,6 +161,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Device Summary Banner
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -211,6 +212,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ),
             const SizedBox(height: 16),
 
+            // Presets List
             ..._presets.map((preset) {
               final isSelected = !_isCustomMode && _selectedPreset == preset['key'];
               return Padding(
@@ -269,6 +271,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             }).toList(),
 
             const SizedBox(height: 10),
+            // Custom Date and Time Picker Card
             InkWell(
               onTap: _pickCustomDateTime,
               borderRadius: BorderRadius.circular(14),
@@ -319,6 +322,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
             const SizedBox(height: 32),
 
+            // Submit Button
             SizedBox(
               width: double.infinity,
               height: 52,
