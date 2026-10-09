@@ -52,6 +52,17 @@ export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
   const [preset, setPreset] = useState<'1_hour' | '24_hours' | '7_days' | '30_days' | 'custom'>('24_hours');
   const [customDateTime, setCustomDateTime] = useState<string>('');
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+
+  const handleScan = () => {
+    setIsScanning(true);
+    setFeedbackMsg({ text: 'রাউটার ও লোকাল সাবনেট স্ক্যান হচ্ছে...', type: 'info' });
+    setTimeout(() => {
+      onRefresh();
+      setIsScanning(false);
+      setFeedbackMsg({ text: 'রাউটার (192.168.1.1) স্ক্যান সম্পন্ন! মোট ডিভাইস যাচাই করা হয়েছে।', type: 'success' });
+    }, 1200);
+  };
 
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId);
 
@@ -263,13 +274,24 @@ export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={onRefresh}
-                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                  title="Verify all connected devices"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleScan}
+                    disabled={isScanning}
+                    className="px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600 border border-blue-500/40 text-blue-300 hover:text-white transition-all text-[10px] font-bold flex items-center gap-1"
+                    title="রাউটার নেটওয়ার্ক স্ক্যান করুন"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isScanning ? 'animate-spin text-blue-400' : ''}`} />
+                    <span>{isScanning ? 'স্ক্যান...' : 'স্ক্যান'}</span>
+                  </button>
+                  <button
+                    onClick={onRefresh}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                    title="Verify all connected devices"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Verified Total Connected Banner (Ans: সব মিলিয়ে কতজন কানেক্ট রয়েছে সেটি নিশ্চিত করবে) */}

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/device.dart';
 
 class DeviceCard extends StatelessWidget {
@@ -122,9 +123,36 @@ class DeviceCard extends StatelessWidget {
                         'IP: ${device.ip}',
                         style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                       ),
-                      Text(
-                        'MAC: ${device.mac}  (${device.manufacturer})',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      InkWell(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: device.mac));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('ম্যাক অ্যাড্রেস কপি করা হয়েছে: ${device.mac}'),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: const Color(0xFF3B82F6),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Row(
+                          children: [
+                            Text(
+                              'MAC: ${device.mac}',
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF38BDF8), fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.copy, size: 12, color: Color(0xFF38BDF8)),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                '(${device.manufacturer})',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

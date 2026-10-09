@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/device.dart';
 import '../services/api_service.dart';
+import '../services/router_service.dart';
+import '../services/network_scanner_service.dart';
 import '../widgets/device_card.dart';
 import 'schedule_screen.dart';
 
@@ -21,6 +24,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   String _filter = 'all'; // 'all' | 'active' | 'blocked'
   Timer? _refreshTimer;
 
+  // Router Connection & Scanner State
+  bool _isConnectingRouter = false;
+  bool _isScanningSubnet = false;
+  double _scanProgress = 0.0;
+  String _scanStatusText = '';
+  RouterInfo? _routerInfo;
+
   @override
   void initState() {
     super.initState();
@@ -29,21 +39,60 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       if (mounted) setState(() {});
     });
 
-    _fetchDevices();
-    _fetchHistory();
+    _initializeRouterAndDevices();
+
+    // Auto refresh every 5 seconds to update timers and detect state
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) {
+      if (mounted && !_isScanningSubnet) {
         _fetchDevices(silent: true);
         if (_tabController.index == 1) _fetchHistory(silent: true);
       }
     });
+
+    // Listen to automatic device expiry notifications
+    NetworkScannerService.addExpiryListener(_handleDeviceExpiredNotice);
+  }
+
+  void _handleDeviceExpiredNotice(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.timer_off, color: Colors.amber, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(message, style: const TextStyle(fontWeight: FontWeight.bold))),
+            ],
+          ),
+          backgroundColor: const Color(0xFFEF4444),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      _fetchDevices(silent: true);
+    }
   }
 
   @override
   void dispose() {
+    NetworkScannerService.removeExpiryListener(_handleDeviceExpiredNotice);
     _tabController.dispose();
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _initializeRouterAndDevices() async {
+    setState(() => _isLoading = true);
+    // 1. Connect and verify router gateway
+    try {
+      final info = await RouterService.testAndConnectRouter();
+      if (mounted) setState(() => _routerInfo = info);
+    } catch (_) {
+      // Fallback
+    }
+
+    // 2. Load devices
+    await _fetchDevices();
+    await _fetchHistory();
   }
 
   Future<void> _fetchDevices({bool silent = false}) async {
@@ -75,8 +124,62 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           _historyItems = items;
         });
       }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  /// Run deep genuine subnet scan for all active devices
+  Future<void> _runNetworkScan() async {
+    setState(() {
+      _isScanningSubnet = true;
+      _scanProgress = 0.05;
+      _scanStatusText = 'রাউটারের সাথে সংযোগ তৈরি হচ্ছে...';
+    });
+
+    try {
+      final scanned = await NetworkScannerService.scanSubnetForRealDevices(
+        onProgress: (prog, text) {
+          if (mounted) {
+            setState(() {
+              _scanProgress = prog;
+              _scanStatusText = text;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _devices = scanned;
+          _isScanningSubnet = false;
+          _errorMessage = null;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'স্ক্যান সম্পন্ন! ${_devices.length} টি জেনুইন ডিভাইস পাওয়া গেছে।',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+      }
+      _fetchHistory(silent: true);
     } catch (e) {
-      // ignore silent history fetch errors
+      if (mounted) {
+        setState(() => _isScanningSubnet = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('স্ক্যান ত্রুটি: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -97,7 +200,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${device.name} রাউটারে ব্লক করা হয়েছে'),
+              content: Text('${device.name} রাউটারে ব্লক করা হয়েছে (MAC: ${device.mac})'),
               backgroundColor: const Color(0xFFEF4444),
             ),
           );
@@ -112,6 +215,263 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         );
       }
     }
+  }
+
+  /// Show Router Connection & Gateway Settings dialog
+  void _showRouterSettingsDialog() {
+    final ipController = TextEditingController(text: RouterService.currentRouterIp);
+    final userController = TextEditingController(text: RouterService.adminUsername);
+    final passController = TextEditingController(text: RouterService.adminPassword);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B82F6).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.router, color: Color(0xFF3B82F6), size: 24),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'রাউটার সংযোগ ও এক্সেস',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    Text(
+                      'Router Gateway & Admin Access',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Router Status Badge
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: RouterService.isConnected ? const Color(0xFF10B981) : Colors.orange,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        RouterService.isConnected ? Icons.check_circle : Icons.warning_amber,
+                        color: RouterService.isConnected ? const Color(0xFF10B981) : Colors.orange,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              RouterService.isConnected ? 'রাউটার সক্রিয় ও সংযুক্ত' : 'রাউটার সংযোগ চেক করুন',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                            ),
+                            Text(
+                              'ব্র্যান্ড: ${RouterService.detectedBrand} • ল্যাটেন্সি: ${RouterService.lastLatencyMs}ms',
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                            Text(
+                              'গেটওয়ে IP: ${RouterService.currentRouterIp} • আপনার ফোন: ${RouterService.currentLocalIp}',
+                              style: const TextStyle(fontSize: 10, color: Color(0xFF38BDF8), fontFamily: 'monospace'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+                const Text(
+                  'রাউটার গেটওয়ে আইপি (Gateway IP):',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: ipController,
+                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+                  decoration: InputDecoration(
+                    hintText: '192.168.1.1',
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.settings_ethernet, color: Color(0xFF3B82F6), size: 20),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Common Presets
+                Wrap(
+                  spacing: 6,
+                  children: ['192.168.1.1', '192.168.0.1', '192.168.31.1', '10.0.0.1'].map((ip) {
+                    final isSel = ipController.text == ip;
+                    return ActionChip(
+                      label: Text(ip, style: TextStyle(fontSize: 10, color: isSel ? Colors.white : Colors.grey)),
+                      backgroundColor: isSel ? const Color(0xFF3B82F6) : const Color(0xFF1E293B),
+                      onPressed: () {
+                        setDialogState(() => ipController.text = ip);
+                      },
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 14),
+                const Text(
+                  'রাউটার অ্যাডমিন লগইন (ঐচ্ছিক):',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: userController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'ইউজারনেম (Username)',
+                    hintText: 'admin',
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.person, color: Colors.grey, size: 20),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: passController,
+                  obscureText: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'পাসওয়ার্ড (Password)',
+                    hintText: 'admin বা আপনার পাসওয়ার্ড',
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.lock, color: Colors.grey, size: 20),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+                // Admin Console Guide Button
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B).withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.vpn_key, color: Color(0xFFF59E0B), size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'রাউটারের সম্পূর্ণ কন্ট্রোল প্যানেল:',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'ব্রাউজারে http://${ipController.text} খুলে DHCP ক্লায়েন্ট তালিকা, ওয়াইফাই পাসওয়ার্ড ও ম্যাক ফিল্টারিং সরাসরি নিয়ন্ত্রণ করা যাবে।',
+                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF38BDF8),
+                          side: const BorderSide(color: Color(0xFF38BDF8)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: 'http://${ipController.text}'));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('রাউটার গেটওয়ে লিংক কপি করা হয়েছে: http://${ipController.text}'),
+                              backgroundColor: const Color(0xFF10B981),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.copy, size: 14),
+                        label: const Text('গেটওয়ে লিংক কপি করুন', style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('বাতিল', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3B82F6),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                final target = ipController.text.trim();
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final info = await RouterService.testAndConnectRouter(
+                    targetIp: target,
+                    username: userController.text.trim(),
+                    password: passController.text.trim(),
+                  );
+                  if (mounted) {
+                    setState(() {
+                      _routerInfo = info;
+                      _isLoading = false;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('রাউটার ${info.ip} এর সাথে সফলভাবে কানেক্ট হয়েছে (${info.brand})'),
+                        backgroundColor: const Color(0xFF10B981),
+                      ),
+                    );
+                    _runNetworkScan();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    setState(() => _isLoading = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('সংযোগ ত্রুটি: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.link, size: 16, color: Colors.white),
+              label: const Text('কানেক্ট করুন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showQuickAddMacDialog() {
@@ -239,33 +599,67 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       return true;
     }).toList();
 
+    final routerBrand = _routerInfo?.brand ?? RouterService.detectedBrand;
+    final routerIp = _routerInfo?.ip ?? RouterService.currentRouterIp;
+
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3B82F6).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.router, color: Color(0xFF3B82F6), size: 22),
-            ),
-            const SizedBox(width: 12),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        title: InkWell(
+          onTap: _showRouterSettingsDialog,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 2.0),
+            child: Row(
               children: [
-                Text(
-                  'NetGuard Router',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.router, color: Color(0xFF3B82F6), size: 22),
                 ),
-                Text(
-                  'Gateway: 192.168.1.1 • Online',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF10B981)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'NetGuard • $routerBrand',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.arrow_drop_down, color: Colors.grey, size: 18),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'গেটওয়ে: $routerIp • সংযুক্ত (${_devices.length} টি আসল ডিভাইস)',
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF10B981)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ],
+          ),
         ),
         bottom: TabBar(
           controller: _tabController,
@@ -275,22 +669,26 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           tabs: [
             Tab(
               icon: const Icon(Icons.phone_android, size: 18),
-              text: 'পরিচালিত ডিভাইস (${_devices.length})',
+              text: 'সক্রিয় ডিভাইস (${_devices.length})',
             ),
             Tab(
               icon: const Icon(Icons.history, size: 18),
-              text: 'কানেক্টেড হিস্ট্রি (${_historyItems.length})',
+              text: 'হিস্ট্রি (${_historyItems.length})',
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              _fetchDevices();
-              _fetchHistory();
-            },
-            tooltip: 'রিফ্রেশ',
+            icon: _isScanningSubnet 
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.radar),
+            tooltip: 'রাউটার নেটওয়ার্ক স্ক্যান করুন',
+            onPressed: _isScanningSubnet ? null : _runNetworkScan,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'রাউটার গেটওয়ে সেটিংস',
+            onPressed: _showRouterSettingsDialog,
           ),
         ],
       ),
@@ -303,7 +701,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Tab 1: Current Managed Devices
+          // Tab 1: Current Managed Real Devices
           RefreshIndicator(
             onRefresh: () async {
               await _fetchDevices();
@@ -311,14 +709,99 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             },
             child: CustomScrollView(
               slivers: [
+                // Scan in progress banner
+                if (_isScanningSubnet)
+                  SliverToBoxAdapter(
+                    child: Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF3B82F6)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)),
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'রাউটারের সাথে সংযুক্ত আসল ডিভাইস স্ক্যান হচ্ছে...',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: _scanProgress,
+                            backgroundColor: const Color(0xFF0F172A),
+                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF38BDF8)),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(_scanStatusText, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Router Access Quick Strip
+                SliverToBoxAdapter(
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.security, color: Color(0xFF10B981), size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              'রাউটার সংযোগ: $routerIp',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ],
+                        ),
+                        InkWell(
+                          onTap: _runNetworkScan,
+                          child: const Row(
+                            children: [
+                              Icon(Icons.refresh, color: Color(0xFF38BDF8), size: 16),
+                              SizedBox(width: 4),
+                              Text(
+                                'নতুন স্ক্যান',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
                       children: [
-                        _buildKpiCard('সক্রিয়', activeCount, const Color(0xFF10B981), Icons.wifi),
+                        _buildKpiCard('সক্রিয় ডিভাইস', activeCount, const Color(0xFF10B981), Icons.wifi),
                         const SizedBox(width: 12),
-                        _buildKpiCard('ব্লকড', blockedCount, const Color(0xFFEF4444), Icons.block),
+                        _buildKpiCard('ব্লকড ডিভাইস', blockedCount, const Color(0xFFEF4444), Icons.block),
                         const SizedBox(width: 12),
                         _buildKpiCard('মেয়াদযুক্ত', scheduledCount, const Color(0xFFF59E0B), Icons.timer),
                       ],
@@ -343,51 +826,34 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
-                if (_isLoading)
+                if (_isLoading && _devices.isEmpty)
                   const SliverFillRemaining(
                     child: Center(child: CircularProgressIndicator()),
                   )
-                else if (_errorMessage != null)
-                  SliverFillRemaining(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.wifi_off, size: 48, color: Colors.red),
-                            const SizedBox(height: 12),
-                            Text('ব্যাকএন্ড সার্ভারে সংযোগ পাওয়া যায়নি', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 8),
-                            Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: () => _fetchDevices(),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('পুনরায় চেষ্টা করুন'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
                 else if (filteredDevices.isEmpty)
-                  const SliverFillRemaining(
+                  SliverFillRemaining(
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.shield, size: 48, color: Color(0xFF3B82F6)),
-                          SizedBox(height: 12),
-                          Text(
-                            'কোনো ডেমো ডিভাইস নেই',
+                          const Icon(Icons.shield, size: 48, color: Color(0xFF3B82F6)),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'কোনো ডিভাইস পাওয়া যায়নি',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
-                          SizedBox(height: 6),
-                          Text(
-                            'নিচের "+ MAC দিয়ে যুক্ত করুন" চেপে শুধুমাত্র ম্যাক দিয়ে ডিভাইস যুক্ত করুন।',
+                          const SizedBox(height: 6),
+                          const Text(
+                            'রাউটারের সকল ডিভাইস খুঁজে পেতে "স্ক্যান করুন" বাটন চাপুন।',
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                             textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
+                            onPressed: _runNetworkScan,
+                            icon: const Icon(Icons.radar, color: Colors.white),
+                            label: const Text('রাউটার স্ক্যান করুন', style: TextStyle(color: Colors.white)),
                           ),
                         ],
                       ),
@@ -423,7 +889,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ),
           ),
 
-          // Tab 2: Connection History (Previously Connected Devices)
+          // Tab 2: Connection History (Previously & Currently Connected Devices)
           RefreshIndicator(
             onRefresh: () async {
               await _fetchHistory();
@@ -451,11 +917,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     itemBuilder: (context, index) {
                       final item = _historyItems[index];
                       final isManaged = _devices.any((d) => d.mac.toUpperCase() == item.mac.toUpperCase());
-                      final liveDevice = isManaged ? _devices.firstWhere((d) => d.mac.toUpperCase() == item.mac.toUpperCase()) : null;
+                      Device? liveDevice;
+                      try {
+                        liveDevice = _devices.firstWhere((d) => d.mac.toUpperCase() == item.mac.toUpperCase());
+                      } catch (_) {
+                        liveDevice = null;
+                      }
 
                       return Card(
-                        color: const Color(0xFF1E293B),
                         margin: const EdgeInsets.only(bottom: 12),
+                        color: const Color(0xFF1E293B),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
@@ -463,30 +934,33 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF8B5CF6).withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Icon(Icons.phone_android, color: Color(0xFFA78BFA), size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.name,
-                                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF3B82F6).withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(10),
                                         ),
-                                        Text(
-                                          'IP: ${item.ip}',
-                                          style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'monospace'),
-                                        ),
-                                      ],
-                                    ),
+                                        child: const Icon(Icons.devices, color: Color(0xFF3B82F6), size: 20),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item.name,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                                          ),
+                                          Text(
+                                            item.ip,
+                                            style: const TextStyle(color: Colors.grey, fontSize: 11, fontFamily: 'monospace'),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -495,7 +969,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      isManaged ? 'পরিচালিত' : 'পূর্বে কানেক্টেড',
+                                      isManaged ? 'পরিচালিত (Managed)' : 'অ-পরিচালিত',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
@@ -547,12 +1021,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                   ),
                                   onPressed: () async {
-                                    // Either open schedule screen directly or quick add
                                     if (liveDevice != null) {
                                       final updated = await Navigator.push<bool>(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) => ScheduleScreen(device: liveDevice),
+                                          builder: (_) => ScheduleScreen(device: liveDevice!),
                                         ),
                                       );
                                       if (updated == true) {
@@ -560,7 +1033,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                         _fetchHistory();
                                       }
                                     } else {
-                                      // Promote and schedule
                                       try {
                                         final newDev = await ApiService.quickAddByMac(mac: item.mac, duration: '7_days');
                                         if (mounted) {
@@ -611,7 +1083,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Expanded(child: Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis)),
                 Icon(icon, size: 16, color: color),
               ],
             ),
