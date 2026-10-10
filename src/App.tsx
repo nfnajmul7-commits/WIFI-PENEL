@@ -795,11 +795,12 @@ export default function App() {
 
     setTimeout(() => {
       setIsScanning(false);
+      setIsRouterLoginOpen(true);
       setToastMessage({ 
-        text: 'লোকাল নেটওয়ার্ক স্ক্যান সম্পন্ন। রাউটারের ক্লায়েন্ট সরাসরি আনতে "রাউটারে লগইন ও ক্লায়েন্ট সিঙ্ক" চাপুন।', 
+        text: 'সঠিক ডিভাইস আনতে আপনার রাউটারের DHCP টেবিল পেস্ট বা সিঙ্ক করুন।', 
         type: 'success' 
       });
-    }, 800);
+    }, 600);
   };
 
   // Handler: Delete Device

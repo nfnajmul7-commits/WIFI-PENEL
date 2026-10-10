@@ -384,4 +384,73 @@ class RouterService {
       'username': adminUsername,
     };
   }
+
+  /// Attempt direct HTTP query to router client endpoints
+  static Future<List<Map<String, String>>> fetchClientsFromGateway(String gatewayIp) async {
+    final List<Map<String, String>> discovered = [];
+    final endpoints = [
+      '/goform/getOnlineList',
+      '/goform/GetParentControlList',
+      '/goform/getClientList',
+      '/cgi-bin/luci/api/misystem/devicelist',
+      '/admin/dhcp?form=client',
+      '/data/client.json',
+    ];
+
+    for (final ep in endpoints) {
+      try {
+        final uri = Uri.parse('http://$gatewayIp$ep');
+        final res = await http.get(uri).timeout(const Duration(milliseconds: 1200));
+        if (res.statusCode == 200 && res.body.trim().isNotEmpty) {
+          // If JSON returned
+          try {
+            final dynamic data = jsonDecode(res.body);
+            if (data is List) {
+              for (final item in data) {
+                if (item is Map) {
+                  final mac = (item['mac'] ?? item['macAddress'] ?? item['deviceId'] ?? '').toString();
+                  final ip = (item['ip'] ?? item['ipAddress'] ?? '').toString();
+                  final name = (item['devName'] ?? item['name'] ?? item['hostname'] ?? '').toString();
+                  if (mac.isNotEmpty && mac.contains(':')) {
+                    discovered.add({
+                      'mac': mac.toUpperCase(),
+                      'ip': ip.isNotEmpty ? ip : '$currentSubnet.100',
+                      'name': name.isNotEmpty ? name : 'ডিভাইস (${mac.substring(mac.length - 5)})',
+                      'category': 'mobile',
+                      'vendor': 'Connected Wi-Fi Device',
+                    });
+                  }
+                }
+              }
+            } else if (data is Map && data.containsKey('list')) {
+              final list = data['list'];
+              if (list is List) {
+                for (final item in list) {
+                  if (item is Map) {
+                    final mac = (item['mac'] ?? item['macAddress'] ?? '').toString();
+                    final ip = (item['ip'] ?? item['ipAddress'] ?? '').toString();
+                    final name = (item['devName'] ?? item['name'] ?? '').toString();
+                    if (mac.isNotEmpty && mac.contains(':')) {
+                      discovered.add({
+                        'mac': mac.toUpperCase(),
+                        'ip': ip.isNotEmpty ? ip : '$currentSubnet.100',
+                        'name': name.isNotEmpty ? name : 'ডিভাইস (${mac.substring(mac.length - 5)})',
+                        'category': 'mobile',
+                        'vendor': 'Connected Wi-Fi Device',
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+
+          if (discovered.isNotEmpty) break;
+        }
+      } catch (_) {}
+    }
+
+    return discovered;
+  }
 }
+

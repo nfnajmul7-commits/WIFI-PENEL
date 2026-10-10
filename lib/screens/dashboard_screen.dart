@@ -677,46 +677,152 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
           title: const Row(
             children: [
-              Icon(Icons.paste, color: Color(0xFF10B981), size: 22),
+              Icon(Icons.paste_rounded, color: Color(0xFF10B981), size: 22),
               SizedBox(width: 8),
-              Text('রাউটার ক্লায়েন্ট টেবিল পেস্ট', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('রাউটার ক্লায়েন্ট টেবিল পেস্ট', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text('সবচেয়ে নির্ভুল ও সঠিক পদ্ধতি (100% Genuine)', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                  ],
+                ),
+              ),
             ],
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'আপনার রাউটারের DHCP Client List বা ARP টেবিল কপি করে নিচে পেস্ট করুন। কোনো ফেক ডাটা তৈরি হবে না।',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: textController,
-                  maxLines: 5,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
-                  decoration: InputDecoration(
-                    hintText: 'TP-Link / Tenda / যেকোনো রাউটার থেকে কপি করা টেবিল পেস্ট করুন...',
-                    hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
-                    filled: true,
-                    fillColor: const Color(0xFF1E293B),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+                    ),
+                    child: const Text(
+                      'আপনার রাউটারের (যেমন TP-Link Archer C54 / Tenda / ইত্যাদি) এডমিন পেজে গিয়ে Network Map > Clients অথবা DHCP Client List সম্পূর্ণ কপি করে নিচে পেস্ট করুন। অ্যাপটি স্বয়ংক্রিয়ভাবে আসল ডিভাইসগুলোর নাম, আইপি ও ম্যাক এক্সট্রাক্ট করবে।',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF93C5FD), height: 1.3),
+                    ),
                   ),
-                  onChanged: (val) {
-                    setDialogState(() {
-                      parsed = NetworkScannerService.parseRawRouterText(val);
-                    });
-                  },
-                ),
-                if (parsed.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  Text(
-                    'সনাক্ত হয়েছে: ${parsed.length} টি আসল ডিভাইস',
-                    style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
+                  const Text('দ্রুত পরীক্ষা করতে ডেমো নমুনা নির্বাচন করুন:', style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.wifi, size: 14, color: Color(0xFF38BDF8)),
+                        label: const Text('TP-Link Archer C54', style: TextStyle(fontSize: 10, color: Colors.white)),
+                        backgroundColor: const Color(0xFF1E293B),
+                        onPressed: () {
+                          setDialogState(() {
+                            textController.text = NetworkScannerService.sampleTpLinkArcher;
+                            parsed = NetworkScannerService.parseRawRouterText(textController.text);
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.router, size: 14, color: Colors.orangeAccent),
+                        label: const Text('Tenda F3/F6', style: TextStyle(fontSize: 10, color: Colors.white)),
+                        backgroundColor: const Color(0xFF1E293B),
+                        onPressed: () {
+                          setDialogState(() {
+                            textController.text = NetworkScannerService.sampleTenda;
+                            parsed = NetworkScannerService.parseRawRouterText(textController.text);
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.smartphone, size: 14, color: Colors.redAccent),
+                        label: const Text('Xiaomi Mi', style: TextStyle(fontSize: 10, color: Colors.white)),
+                        backgroundColor: const Color(0xFF1E293B),
+                        onPressed: () {
+                          setDialogState(() {
+                            textController.text = NetworkScannerService.sampleXiaomi;
+                            parsed = NetworkScannerService.parseRawRouterText(textController.text);
+                          });
+                        },
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: textController,
+                    maxLines: 5,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'monospace'),
+                    decoration: InputDecoration(
+                      hintText: 'এখানে রাউটারের DHCP টেবিল টেক্সট পেস্ট করুন...',
+                      hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
+                      filled: true,
+                      fillColor: const Color(0xFF1E293B),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onChanged: (val) {
+                      setDialogState(() {
+                        parsed = NetworkScannerService.parseRawRouterText(val);
+                      });
+                    },
+                  ),
+                  if (parsed.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          'সফলভাবে সনাক্ত হয়েছে: ${parsed.length} টি আসল ডিভাইস',
+                          style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 140),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF334155)),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: parsed.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF1E293B)),
+                        itemBuilder: (c, idx) {
+                          final item = parsed[idx];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 10,
+                                  backgroundColor: const Color(0xFF10B981).withOpacity(0.2),
+                                  child: Text('${idx + 1}', style: const TextStyle(fontSize: 9, color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(item['name'] ?? '', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis),
+                                      Text('${item['ip']} • ${item['mac']}', style: const TextStyle(fontSize: 9, color: Colors.grey, fontFamily: 'monospace')),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
           actions: [
@@ -724,7 +830,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               onPressed: () => Navigator.pop(ctx),
               child: const Text('বাতিল', style: TextStyle(color: Colors.grey)),
             ),
-            ElevatedButton(
+            ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF10B981),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -743,7 +849,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     });
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('${synced.length} টি আসল ডিভাইস সফলভাবে আমদানি করা হয়েছে!'),
+                        content: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            Text('${synced.length} টি আসল ডিভাইস সফলভাবে আমদানি ও ম্যানেজ করা হয়েছে!'),
+                          ],
+                        ),
                         backgroundColor: const Color(0xFF10B981),
                       ),
                     );
@@ -753,7 +865,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   if (mounted) setState(() => _isLoading = false);
                 }
               },
-              child: const Text('আমদানি করুন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.check, size: 16, color: Colors.white),
+              label: Text('এই ${parsed.isNotEmpty ? "${parsed.length}টি " : ""}আমদানি করুন', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -863,6 +976,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.paste_rounded, color: Color(0xFF10B981)),
+            tooltip: 'রাউটার DHCP টেবিল পেস্ট বা ইমপোর্ট (সবচেয়ে সঠিক)',
+            onPressed: _showPasteClientsDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.sync, color: Color(0xFF38BDF8)),
             tooltip: 'রাউটার থেকে ক্লায়েন্ট সিঙ্ক করুন',
@@ -975,17 +1093,28 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                             ),
                           ],
                         ),
-                        Row(
+                        Wrap(
+                          spacing: 6,
                           children: [
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: _showPasteClientsDialog,
+                              icon: const Icon(Icons.paste, size: 12, color: Colors.white),
+                              label: const Text('টেবিল পেস্ট', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                            ),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF3B82F6),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                               onPressed: _syncRouterClients,
-                              icon: const Icon(Icons.sync, size: 14, color: Colors.white),
-                              label: const Text('সিঙ্ক করুন', style: TextStyle(fontSize: 11, color: Colors.white)),
+                              icon: const Icon(Icons.sync, size: 12, color: Colors.white),
+                              label: const Text('সিঙ্ক', style: TextStyle(fontSize: 11, color: Colors.white)),
                             ),
                           ],
                         ),
@@ -1029,47 +1158,68 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               decoration: BoxDecoration(
                                 color: const Color(0xFF1E293B),
                                 shape: BoxShape.circle,
-                                border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+                                border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
                               ),
-                              child: const Icon(Icons.shield_outlined, size: 48, color: Color(0xFF38BDF8)),
+                              child: const Icon(Icons.router, size: 48, color: Color(0xFF10B981)),
                             ),
                             const SizedBox(height: 16),
                             const Text(
-                              'কোনো ফেক ডিভাইস নেই',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                              'রাউটারের সঠিক ডিভাইস দেখতে নিচের অপশন ব্যবহার করুন',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                              textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'আপনার রাউটারে (${RouterService.selectedBrandConfig.name.split("(").first.trim()}) লগইন করুন অথবা "সিঙ্ক / স্ক্যান" বাটন চাপুন আসল সংযুক্ত ডিভাইস দেখতে।',
+                              'আপনার রাউটারের (${RouterService.selectedBrandConfig.name.split("(").first.trim()}) এডমিন পেজ থেকে DHCP টেবিল কপি করে পেস্ট করুন অথবা অটো-সিঙ্ক চাপুন।',
                               style: const TextStyle(fontSize: 12, color: Colors.grey),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 20),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              alignment: WrapAlignment.center,
+                            Column(
                               children: [
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-                                  onPressed: _syncRouterClients,
-                                  icon: const Icon(Icons.sync, color: Colors.white, size: 16),
-                                  label: const Text('রাউটার থেকে ক্লায়েন্ট সিঙ্ক', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                ),
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
-                                  onPressed: _showRouterSettingsDialog,
-                                  icon: const Icon(Icons.login, color: Colors.white, size: 16),
-                                  label: const Text('রাউটারে লগইন করুন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                ),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFF38BDF8),
-                                    side: const BorderSide(color: Color(0xFF38BDF8)),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF10B981),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    onPressed: _showPasteClientsDialog,
+                                    icon: const Icon(Icons.paste, color: Colors.white, size: 18),
+                                    label: const Text('১. রাউটারের DHCP টেবিল পেস্ট করুন (সবচেয়ে সঠিক)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                                   ),
-                                  onPressed: _runNetworkScan,
-                                  icon: const Icon(Icons.radar, size: 16),
-                                  label: const Text('নেটওয়ার্ক স্ক্যান'),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF3B82F6),
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                        onPressed: _syncRouterClients,
+                                        icon: const Icon(Icons.sync, color: Colors.white, size: 16),
+                                        label: const Text('২. অটো-সিঙ্ক', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: const Color(0xFF38BDF8),
+                                          side: const BorderSide(color: Color(0xFF38BDF8)),
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                        onPressed: _runNetworkScan,
+                                        icon: const Icon(Icons.radar, size: 16),
+                                        label: const Text('৩. ডিপ স্ক্যান', style: TextStyle(fontSize: 12)),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),

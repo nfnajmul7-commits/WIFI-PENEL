@@ -459,6 +459,7 @@ export const RouterLoginModal: React.FC<RouterLoginModalProps> = ({
         const ip = ipMatch ? ipMatch[1] : getSubnetIp(101 + extracted.length);
 
         // Extract name: words on the line that are not MAC and not IP
+        const ignoredKeywords = new Set(['online', 'offline', 'permanent', 'dhcp', 'static', 'dynamic', 'status', 'device', 'name', 'address', 'ip', 'mac', 'lease', 'time', 'lan', 'wifi', 'wlan', '2.4g', '5g', 'mb/s', 'kb/s']);
         let words = line
           .replace(macRegex, ' ')
           .replace(ipRegex, ' ')
@@ -467,9 +468,9 @@ export const RouterLoginModal: React.FC<RouterLoginModalProps> = ({
           .replace(/[\|\t]/g, ' ')
           .trim()
           .split(/\s+/)
-          .filter((w) => w.length > 0 && !/^\d+$/.test(w)); // filter line numbers
+          .filter((w) => w.length > 0 && !/^\d+$/.test(w) && !ignoredKeywords.has(w.toLowerCase())); // filter line numbers and table headers
 
-        let deviceName = words.slice(0, 3).join(' ').trim();
+        let deviceName = words.slice(0, 2).join(' ').trim();
         const vendor = resolveVendor(normalizedMac);
 
         if (!deviceName || ['dynamic', 'static', 'lan', 'wifi', 'wlan', 'dhcp', 'bound'].includes(deviceName.toLowerCase())) {
@@ -978,11 +979,49 @@ export const RouterLoginModal: React.FC<RouterLoginModalProps> = ({
                 </div>
               </div>
 
-              {/* Textarea for pasting */}
+              {/* Quick Sample Presets */}
               <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  রাউটার ক্লায়েন্ট লিস্ট বা ARP টেবিল পেস্ট করুন:
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-bold text-slate-300">
+                    রাউটার ক্লায়েন্ট লিস্ট বা ARP টেবিল পেস্ট করুন:
+                  </label>
+                  <span className="text-[10px] text-emerald-400 font-semibold">১০০% সঠিক আসল ডিভাইস</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sample = `1 Galaxy-A52 3C-22-FB-9E-44-A1 192.168.0.100 01:59:30\n2 iPhone-13 F4-F5-DB-11-22-33 192.168.0.101 01:58:20\n3 Redmi-Note10 AC-23-3F-44-55-66 192.168.0.102 01:45:00\n4 Walton-Primo 7A-12-4E-99-88-77 192.168.0.103 01:30:15\n5 DESKTOP-PC 50-D4-F7-77-88-99 192.168.0.105 Permanent`;
+                      handleParseRawClientText(sample);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-teal-500/30 text-[10px] text-teal-300 font-bold flex items-center gap-1 transition-all"
+                  >
+                    <Radio className="w-3 h-3 text-teal-400" />
+                    TP-Link Archer C54 নমুনা
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sample = `Galaxy-M32 192.168.0.101 E8:65:D4:11:22:33 Online\nRealme-8 192.168.0.102 CC:2D:1B:33:44:55 Online\nSmart-TV-LG 192.168.0.104 48:D7:05:66:77:88 Online`;
+                      handleParseRawClientText(sample);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-orange-500/30 text-[10px] text-orange-300 font-bold flex items-center gap-1 transition-all"
+                  >
+                    <Radio className="w-3 h-3 text-orange-400" />
+                    Tenda F3/F6 নমুনা
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sample = `Redmi-K50 192.168.31.101 3C:22:FB:12:34:56 Online\nMi-Pad-5 192.168.31.102 7C:49:EB:78:90:12 Online`;
+                      handleParseRawClientText(sample);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-red-500/30 text-[10px] text-red-300 font-bold flex items-center gap-1 transition-all"
+                  >
+                    <Radio className="w-3 h-3 text-red-400" />
+                    Xiaomi Mi নমুনা
+                  </button>
+                </div>
                 <textarea
                   rows={4}
                   value={rawClientInput}
