@@ -668,21 +668,29 @@ export default function App() {
   // Scan Real Connected Devices directly from Router Gateway
   const handleScanRouterDevices = async () => {
     setIsScanning(true);
-    setToastMessage({ text: 'রাউটার ARP টেবিল ও DHCP লিজ স্ক্যান করা হচ্ছে...', type: 'warn' });
+    setToastMessage({ text: 'রাউটার ARP টেবিল ও সাবনেট স্ক্যান করা হচ্ছে...', type: 'warn' });
     
     try {
-      const res = await fetch('http://192.168.1.1:8000/api/router/scan', {
-        method: 'POST',
-      }).catch(() => null);
+      // Try local endpoints in order: relative API, localhost, router IP
+      const endpoints = [
+        '/api/router/scan',
+        'http://localhost:8000/api/router/scan',
+        `http://${routerGatewayIp}:8000/api/router/scan`,
+      ];
 
-      if (res && res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setDevices(data);
-          setToastMessage({ text: `সফল! রাউটার থেকে ${data.length}টি আসল (Genuine) ডিভাইস পাওয়া গেছে।`, type: 'success' });
-          setIsScanning(false);
-          return;
-        }
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep, { method: 'POST' }).catch(() => null);
+          if (res && res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              setDevices(data);
+              setToastMessage({ text: `সফল! রাউটার থেকে ${data.length}টি আসল (Genuine) ডিভাইস পাওয়া গেছে।`, type: 'success' });
+              setIsScanning(false);
+              return;
+            }
+          }
+        } catch (_) {}
       }
     } catch (e) {
       console.log('Backend scan attempt:', e);
@@ -691,10 +699,10 @@ export default function App() {
     setTimeout(() => {
       setIsScanning(false);
       setToastMessage({ 
-        text: 'স্ক্যান সম্পন্ন হয়েছে। কোনো ডেমো ডিভাইস নেই—নতুন ডিভাইস যুক্ত করতে "নতুন মোবাইল অনুমতি দিন" চাপুন।', 
+        text: 'লোকাল নেটওয়ার্ক স্ক্যান সম্পন্ন। রাউটারের ক্লায়েন্ট সরাসরি আনতে "রাউটারে লগইন ও ক্লায়েন্ট সিঙ্ক" চাপুন।', 
         type: 'success' 
       });
-    }, 1000);
+    }, 800);
   };
 
   // Handler: Delete Device

@@ -81,61 +81,92 @@ class NetworkScannerService {
     }
   }
 
-  /// Sync real connected clients directly from the logged-in Router
-  /// Matches the exact client table seen in router's web management interface (e.g. TP-Link Archer C54)
-  static Future<List<Device>> syncClientsFromRouter({String? brandId}) async {
-    await initialize();
-    final subnet = RouterService.currentSubnet;
-    final brand = brandId ?? RouterService.selectedBrandConfig.id;
+  /// Parse raw router table text (DHCP Leases / ARP) into genuine devices
+  static List<Map<String, String>> parseRawRouterText(String text) {
+    if (text.trim().isEmpty) return [];
+    final List<Map<String, String>> result = [];
+    final Set<String> seenMacs = {};
 
-    // Real clients synced from user's router
-    final List<Map<String, String>> routerClients = [
-      {
-        'name': 'NT',
-        'ip': '$subnet.100',
-        'mac': '4E:51:7A:B3:26:BC',
-        'category': 'mobile',
-        'vendor': 'Smart Phone / Client',
-      },
-      {
-        'name': 'TENDA F6',
-        'ip': '$subnet.101',
-        'mac': 'E8:65:D4:57:BE:C0',
-        'category': 'tv',
-        'vendor': 'Tenda Technology (2nd Router)',
-      },
-      {
-        'name': 'CCTV',
-        'ip': '$subnet.102',
-        'mac': '54:8B:17:F1:F1:C9',
-        'category': 'gaming',
-        'vendor': 'IP Security Camera',
-      },
-      {
-        'name': 'galaxy-A15',
-        'ip': '$subnet.103',
-        'mac': '7A:12:4E:99:11:AB',
-        'category': 'mobile',
-        'vendor': 'Samsung Electronics',
-      },
-      {
-        'name': 'Desktop-PC',
-        'ip': '$subnet.104',
-        'mac': '00:D8:61:4F:22:90',
-        'category': 'laptop',
-        'vendor': 'Realtek Ethernet',
-      },
-      {
-        'name': 'Redmi-Guest',
-        'ip': '$subnet.105',
-        'mac': '3C:22:FB:9E:44:A1',
-        'category': 'mobile',
-        'vendor': 'Xiaomi Communications',
-      },
-    ];
+    final macRegex = RegExp(r'([0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2})');
+    final ipRegex = RegExp(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b');
+
+    final lines = text.split('\n');
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      final macMatch = macRegex.firstMatch(line);
+      if (macMatch == null) continue;
+
+      final mac = macMatch.group(1)!.replaceAll('-', ':').toUpperCase();
+      if (seenMacs.contains(mac)) continue;
+      seenMacs.add(mac);
+
+      final ipMatch = ipRegex.firstMatch(line);
+      final ip = ipMatch != null ? ipMatch.group(1)! : '${RouterService.currentSubnet}.${100 + result.length}';
+
+      // Clean line to find device name
+      String name = line
+          .replaceAll(macRegex, ' ')
+          .replaceAll(ipRegex, ' ')
+          .replaceAll(RegExp(r'\d{1,2}:\d{2}:\d{2}'), ' ')
+          .replaceAll(RegExp(r'\d{4}-\d{2}-\d{2}'), ' ')
+          .replaceAll(RegExp(r'[\|\t]'), ' ')
+          .trim();
+
+      final words = name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty && !RegExp(r'^\d+$').hasMatch(w)).toList();
+      String devName = words.take(3).join(' ').trim();
+      final vendor = _lookupVendor(mac);
+
+      if (devName.isEmpty || devName.toLowerCase() == 'dynamic' || devName.toLowerCase() == 'lan') {
+        devName = vendor != 'Wi-Fi Client Device' ? vendor : 'সংযুক্ত ডিভাইস (${mac.substring(mac.length - 5)})';
+      }
+
+      final category = _guessCategory(vendor, ip);
+      result.add({
+        'name': devName,
+        'ip': ip,
+        'mac': mac,
+        'category': category,
+        'vendor': vendor,
+      });
+    }
+
+    return result;
+  }
+
+  /// Sync real connected clients directly from Router ARP / DHCP
+  /// Strictly NO fake devices: uses live ARP table or scanned active hosts
+  static Future<List<Device>> syncClientsFromRouter({String? brandId, List<Map<String, String>>? customClients}) async {
+    await initialize();
+    final now = DateTime.now().toUtc();
+
+    List<Map<String, String>> routerClients = [];
+
+    if (customClients != null && customClients.isNotEmpty) {
+      routerClients = customClients;
+    } else {
+      // Read live ARP table on device
+      final arp = await _readArpTable();
+      if (arp.isNotEmpty) {
+        for (final entry in arp.entries) {
+          final ip = entry.key;
+          final mac = entry.value;
+          final vendor = _lookupVendor(mac);
+          final category = _guessCategory(vendor, ip);
+          final name = _guessName(vendor, category, ip);
+          routerClients.add({
+            'name': name,
+            'ip': ip,
+            'mac': mac,
+            'category': category,
+            'vendor': vendor,
+          });
+        }
+      }
+    }
 
     int nextId = _devices.isNotEmpty ? _devices.map((d) => d.id).reduce((a, b) => a > b ? a : b) + 1 : 1;
-    final now = DateTime.now().toUtc();
 
     for (final c in routerClients) {
       final mac = c['mac']!;
@@ -170,7 +201,7 @@ class NetworkScannerService {
           category: category,
           manufacturer: vendor,
           expiry: now.add(const Duration(days: 7)),
-          connectedAt: DateTime.now().subtract(Duration(minutes: (ip.hashCode % 120).abs())),
+          connectedAt: DateTime.now(),
           remainingSeconds: 7 * 24 * 3600,
         ));
       }

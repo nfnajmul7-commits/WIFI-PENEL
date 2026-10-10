@@ -665,6 +665,102 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
+  void _showPasteClientsDialog() {
+    final textController = TextEditingController();
+    List<Map<String, String>> parsed = [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: const Row(
+            children: [
+              Icon(Icons.paste, color: Color(0xFF10B981), size: 22),
+              SizedBox(width: 8),
+              Text('রাউটার ক্লায়েন্ট টেবিল পেস্ট', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'আপনার রাউটারের DHCP Client List বা ARP টেবিল কপি করে নিচে পেস্ট করুন। কোনো ফেক ডাটা তৈরি হবে না।',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: textController,
+                  maxLines: 5,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
+                  decoration: InputDecoration(
+                    hintText: 'TP-Link / Tenda / যেকোনো রাউটার থেকে কপি করা টেবিল পেস্ট করুন...',
+                    hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onChanged: (val) {
+                    setDialogState(() {
+                      parsed = NetworkScannerService.parseRawRouterText(val);
+                    });
+                  },
+                ),
+                if (parsed.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'সনাক্ত হয়েছে: ${parsed.length} টি আসল ডিভাইস',
+                    style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('বাতিল', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                final list = NetworkScannerService.parseRawRouterText(textController.text);
+                if (list.isEmpty) return;
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                try {
+                  final synced = await NetworkScannerService.syncClientsFromRouter(customClients: list);
+                  if (mounted) {
+                    setState(() {
+                      _devices = synced;
+                      _isLoading = false;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${synced.length} টি আসল ডিভাইস সফলভাবে আমদানি করা হয়েছে!'),
+                        backgroundColor: const Color(0xFF10B981),
+                      ),
+                    );
+                  }
+                  _fetchHistory(silent: true);
+                } catch (e) {
+                  if (mounted) setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('আমদানি করুন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDurationChoice(String label, String value, String current, Function(String) onSelect) {
     final isSelected = current == value;
     return ChoiceChip(
