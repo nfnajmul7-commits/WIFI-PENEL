@@ -783,7 +783,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       return true;
     }).toList();
 
-    final routerBrand = RouterService.selectedBrandConfig.name.split('(').first.trim();
+    final routerBrand = RouterService.selectedBrandConfig.name.split("(").first.trim();
     final routerIp = RouterService.currentRouterIp;
     final isLoggedIn = RouterService.isLoggedIn;
 
@@ -964,7 +964,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  RouterService.selectedBrandConfig.name.split('(').first.trim(),
+                                  RouterService.selectedBrandConfig.name.split("(").first.trim(),
                                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                                 ),
                                 Text(
@@ -1040,7 +1040,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'আপনার রাউটারে (${RouterService.selectedBrandConfig.name.split('(').first.trim()}) লগইন করুন অথবা "সিঙ্ক / স্ক্যান" বাটন চাপুন আসল সংযুক্ত ডিভাইস দেখতে।',
+                              'আপনার রাউটারে (${RouterService.selectedBrandConfig.name.split("(").first.trim()}) লগইন করুন অথবা "সিঙ্ক / স্ক্যান" বাটন চাপুন আসল সংযুক্ত ডিভাইস দেখতে।',
                               style: const TextStyle(fontSize: 12, color: Colors.grey),
                               textAlign: TextAlign.center,
                             ),
@@ -1193,6 +1193,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       );
                     },
                   ),
+          ),
         ],
       ),
     );
