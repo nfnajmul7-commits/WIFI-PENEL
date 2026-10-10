@@ -53,6 +53,11 @@ class ApiService {
     }
   }
 
+  /// Sync real clients from router
+  static Future<List<Device>> syncClientsFromRouter({String? brandId}) async {
+    return await NetworkScannerService.syncClientsFromRouter(brandId: brandId);
+  }
+
   /// Schedule device expiry
   static Future<Device> setSchedule({
     required int deviceId,

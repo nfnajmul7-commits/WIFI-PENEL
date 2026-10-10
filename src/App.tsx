@@ -36,89 +36,22 @@ import {
   History,
   Zap,
   Copy,
-  CheckCheck
+  CheckCheck,
+  Router,
+  LogIn
 } from 'lucide-react';
 import { Device, RouterLog, ConnectedRouterNode, ConnectedDeviceHistoryItem } from './types';
 import { CodeExplorer } from './components/CodeExplorer';
 import { ArchitectureGuide } from './components/ArchitectureGuide';
 import { GitHubActionsModal } from './components/GitHubActionsModal';
 import { MobileSimulator } from './components/MobileSimulator';
+import { RouterLoginModal, ROUTER_BRANDS, RouterBrandItem } from './components/RouterLoginModal';
 
-// Initial realistic connection history discovered from router ARP table and DHCP leases
-const INITIAL_CONNECTION_HISTORY: ConnectedDeviceHistoryItem[] = [
-  {
-    id: 'hist-1',
-    mac: '3C:22:FB:9E:44:A1',
-    ip: '192.168.1.105',
-    name: 'Redmi Note 12 5G (গেস্ট)',
-    category: 'mobile',
-    manufacturer: 'Xiaomi Communications',
-    firstSeen: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
-    lastSeen: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-    connectionCount: 14,
-    lastRouter: 'main',
-    isOnlineNow: true,
-    currentStatus: 'active'
-  },
-  {
-    id: 'hist-2',
-    mac: '5E:8B:F2:3A:99:02',
-    ip: '192.168.1.112',
-    name: 'Samsung Galaxy A54',
-    category: 'mobile',
-    manufacturer: 'Samsung Electronics',
-    firstSeen: new Date(Date.now() - 12 * 24 * 3600 * 1000).toISOString(),
-    lastSeen: new Date(Date.now() - 14 * 3600 * 1000).toISOString(),
-    connectionCount: 38,
-    lastRouter: 'secondary',
-    isOnlineNow: false,
-    currentStatus: 'disconnected'
-  },
-  {
-    id: 'hist-3',
-    mac: 'A4:C3:F0:77:22:9B',
-    ip: '192.168.1.120',
-    name: 'Realme C55 (আগের রুমমেট)',
-    category: 'mobile',
-    manufacturer: 'Realme Mobile Corp',
-    firstSeen: new Date(Date.now() - 25 * 24 * 3600 * 1000).toISOString(),
-    lastSeen: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
-    connectionCount: 52,
-    lastRouter: 'main',
-    isOnlineNow: false,
-    currentStatus: 'disconnected'
-  },
-  {
-    id: 'hist-4',
-    mac: '88:29:9C:3B:11:4E',
-    ip: '192.168.1.135',
-    name: 'Vivo Y22 Smartphone',
-    category: 'mobile',
-    manufacturer: 'Vivo Mobile Corp',
-    firstSeen: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString(),
-    lastSeen: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    connectionCount: 9,
-    lastRouter: 'main',
-    isOnlineNow: true,
-    currentStatus: 'active'
-  },
-  {
-    id: 'hist-5',
-    mac: 'F0:18:98:8C:21:40',
-    ip: '192.168.1.144',
-    name: 'iPhone 13 (সাদিয়া)',
-    category: 'mobile',
-    manufacturer: 'Apple Inc.',
-    firstSeen: new Date(Date.now() - 18 * 24 * 3600 * 1000).toISOString(),
-    lastSeen: new Date(Date.now() - 6 * 3600 * 1000).toISOString(),
-    connectionCount: 41,
-    lastRouter: 'secondary',
-    isOnlineNow: false,
-    currentStatus: 'disconnected'
-  }
-];
+// STRICTLY ZERO FAKE DEVICES: Initial connection history and active devices start empty
+// Devices are populated ONLY when scanned from router or synced via Router Login
+const INITIAL_CONNECTION_HISTORY: ConnectedDeviceHistoryItem[] = [];
 
-// No demo devices in active list. Initial state is empty unless genuine devices are scanned or added!
+// No demo devices in active list. Initial state is empty unless genuine devices are scanned or synced!
 const INITIAL_GENUINE_DEVICES: Device[] = [];
 
 export default function App() {
@@ -160,6 +93,12 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'blocked' | 'timed'>('all');
   const [isScanning, setIsScanning] = useState(false);
   const [copiedMac, setCopiedMac] = useState<string | null>(null);
+
+  // Router Company & Brand Login State
+  const [isRouterLoginOpen, setIsRouterLoginOpen] = useState(false);
+  const [routerBrand, setRouterBrand] = useState<RouterBrandItem>(ROUTER_BRANDS[0]); // TP-Link Archer C54 default
+  const [routerGatewayIp, setRouterGatewayIp] = useState('192.168.0.1');
+  const [isRouterLoggedIn, setIsRouterLoggedIn] = useState(false);
 
   // Quick Add by MAC ONLY state
   const [quickMacInput, setQuickMacInput] = useState('');
@@ -686,6 +625,44 @@ export default function App() {
       text: 'সংযুক্ত সব মোবাইল ডিভাইস ও রাউটার স্ট্যাটাস সফলভাবে রিফ্রেশ করা হয়েছে।',
       type: 'success',
     });
+  };
+
+  const handleRouterLoginSuccess = (config: {
+    brand: RouterBrandItem;
+    gatewayIp: string;
+    isLoggedIn: boolean;
+    syncedDevices: Device[];
+  }) => {
+    setRouterBrand(config.brand);
+    setRouterGatewayIp(config.gatewayIp);
+    setIsRouterLoggedIn(config.isLoggedIn);
+    setDevices(config.syncedDevices);
+
+    const historyItems: ConnectedDeviceHistoryItem[] = config.syncedDevices.map((d) => ({
+      id: `hist-${d.id}`,
+      mac: d.mac,
+      ip: d.ip,
+      name: d.name,
+      category: d.category,
+      manufacturer: d.manufacturer,
+      firstSeen: d.connectedAt,
+      lastSeen: d.connectedAt,
+      connectionCount: 1,
+      lastRouter: d.connectedRouter,
+      isOnlineNow: true,
+      currentStatus: d.status,
+      expiry: d.expiry,
+    }));
+    setHistoryDevices(historyItems);
+
+    setToastMessage({
+      text: `🎉 ${config.brand.name.split('(')[0].trim()} এ সফলভাবে লগইন হয়েছে এবং ${config.syncedDevices.length} টি আসল ডিভাইস সিঙ্ক হয়েছে!`,
+      type: 'success',
+    });
+  };
+
+  const handleSyncFromRouter = () => {
+    setIsRouterLoginOpen(true);
   };
 
   // Scan Real Connected Devices directly from Router Gateway
@@ -1284,6 +1261,28 @@ export default function App() {
             </div>
           </div>
 
+          {/* Router Brand & Login Hub Button */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsRouterLoginOpen(true)}
+              className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-blue-500/50 text-xs transition-all shadow-sm group"
+              title="রাউটার কোম্পানি নির্বাচন ও লগইন করুন"
+            >
+              <div className="p-1.5 rounded-xl bg-blue-600/20 text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <Router className="w-4 h-4" />
+              </div>
+              <div className="text-left">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-white text-xs">{routerBrand.name.split('(')[0].trim()}</span>
+                  <span className={`w-2 h-2 rounded-full ${isRouterLoggedIn ? 'bg-emerald-400 shadow-sm shadow-emerald-400' : 'bg-amber-400'}`}></span>
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  {isRouterLoggedIn ? 'লগইন সম্পন্ন' : 'লগইন করুন'} • {routerGatewayIp}
+                </div>
+              </div>
+            </button>
+          </div>
+
           {/* Navigation Tabs */}
           <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
             <button
@@ -1627,6 +1626,11 @@ export default function App() {
                     onRefresh={handleRefreshDevices}
                     clientConnectedVia={clientConnectedVia}
                     onSwitchClientNetwork={setClientConnectedVia}
+                    routerBrandName={routerBrand.name.split('(')[0].trim()}
+                    routerGatewayIp={routerGatewayIp}
+                    isRouterLoggedIn={isRouterLoggedIn}
+                    onOpenRouterLogin={() => setIsRouterLoginOpen(true)}
+                    onSyncRouterClients={handleSyncFromRouter}
                   />
                 </div>
 
@@ -1890,21 +1894,21 @@ export default function App() {
                     <ShieldCheck className="w-7 h-7 text-blue-400" />
                   </div>
                   <div className="max-w-md mx-auto space-y-1.5">
-                    <h3 className="text-base font-extrabold text-white">কোনো ডেমো ডিভাইস নেই (Zero Demo Devices)</h3>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      এই অ্যাপে কোনো কৃত্রিম বা ডেমো ডিভাইস রাখা হয়নি। শুধুমাত্র আপনার রাউটারে সংযুক্ত <strong>জেনুইন (আসল) ডিভাইসগুলোই</strong> এখানে থাকবে।
+                    <h3 className="text-base font-extrabold text-white">কোনো ফেক বা ডামি ডিভাইস নেই (No Fake Devices)</h3>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      এই অ্যাপে কোনো কৃত্রিম ডামি ডিভাইস রাখা হয়নি। আপনার রাউটারে ({routerBrand.name.split('(')[0].trim()}) লগইন করে সরাসরি সংযুক্ত <strong>আসল ডিভাইসগুলো সিঙ্ক করুন</strong> অথবা লোকাল সাবনেট স্ক্যান করুন।
                     </p>
-                    <p className="text-[11px] text-slate-500">
-                      আপনার রাউটারে কানেক্টেড মোবাইল অনুমতি দিতে নিচে ক্লিক করুন অথবা রাউটার স্ক্যান করুন।
+                    <p className="text-[11px] text-slate-400">
+                      গেটওয়ে: <span className="font-mono text-blue-400 font-bold">{routerGatewayIp}</span> • স্ট্যাটাস: <span className={isRouterLoggedIn ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>{isRouterLoggedIn ? "লগইন সম্পন্ন" : "লগইন প্রয়োজন"}</span>
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
                     <button
-                      onClick={() => setIsAddDeviceOpen(true)}
-                      className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all active:scale-[0.98]"
+                      onClick={() => setIsRouterLoginOpen(true)}
+                      className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-950 transition-all active:scale-[0.98]"
                     >
-                      <Plus className="w-4 h-4" />
-                      নতুন জেনুইন মোবাইল অনুমতি দিন
+                      <Router className="w-4 h-4" />
+                      রাউটারে লগইন ও ক্লায়েন্ট সিঙ্ক
                     </button>
                     <button
                       onClick={handleScanRouterDevices}
@@ -1912,7 +1916,14 @@ export default function App() {
                       className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition-all active:scale-[0.98]"
                     >
                       <Search className={`w-4 h-4 text-emerald-400 ${isScanning ? 'animate-spin' : ''}`} />
-                      {isScanning ? 'স্ক্যান করা হচ্ছে...' : 'রাউটার স্ক্যান করুন (Scan Real ARP)'}
+                      {isScanning ? 'স্ক্যান করা হচ্ছে...' : 'লোকাল নেটওয়ার্ক স্ক্যান (ARP)'}
+                    </button>
+                    <button
+                      onClick={() => setIsAddDeviceOpen(true)}
+                      className="px-3.5 py-2.5 rounded-2xl bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 text-xs font-bold flex items-center gap-1.5 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      MAC দিয়ে যুক্ত করুন
                     </button>
                   </div>
                 </div>
@@ -2474,6 +2485,16 @@ export default function App() {
       <GitHubActionsModal
         isOpen={isGithubModalOpen}
         onClose={() => setIsGithubModalOpen(false)}
+      />
+
+      {/* Router Company Brand Login & Genuine Client Sync Modal */}
+      <RouterLoginModal
+        isOpen={isRouterLoginOpen}
+        onClose={() => setIsRouterLoginOpen(false)}
+        activeBrandId={routerBrand.id}
+        currentGatewayIp={routerGatewayIp}
+        isLoggedIn={isRouterLoggedIn}
+        onLoginSuccess={handleRouterLoginSuccess}
       />
     </div>
   );

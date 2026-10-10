@@ -21,7 +21,9 @@ import {
   Network,
   Share2,
   Check,
-  Activity
+  Activity,
+  Router,
+  LogIn
 } from 'lucide-react';
 import { Device, ConnectedRouterNode } from '../types';
 
@@ -33,6 +35,11 @@ interface MobileSimulatorProps {
   onRefresh: () => void;
   clientConnectedVia: ConnectedRouterNode;
   onSwitchClientNetwork: (node: ConnectedRouterNode) => void;
+  routerBrandName?: string;
+  routerGatewayIp?: string;
+  isRouterLoggedIn?: boolean;
+  onOpenRouterLogin?: () => void;
+  onSyncRouterClients?: () => void;
 }
 
 export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
@@ -43,6 +50,11 @@ export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
   onRefresh,
   clientConnectedVia,
   onSwitchClientNetwork,
+  routerBrandName = 'TP-Link Archer C54',
+  routerGatewayIp = '192.168.0.1',
+  isRouterLoggedIn = false,
+  onOpenRouterLogin,
+  onSyncRouterClients,
 }) => {
   const [activeScreen, setActiveScreen] = useState<'dashboard' | 'schedule'>('dashboard');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
@@ -248,33 +260,36 @@ export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
               {/* Flutter App Header */}
               <div className="px-3.5 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`p-2 rounded-xl border ${
-                    clientConnectedVia === 'secondary' 
-                      ? 'bg-purple-600/20 text-purple-400 border-purple-500/30' 
-                      : 'bg-blue-600/20 text-blue-400 border-blue-500/30'
-                  }`}>
-                    <Radio className="w-4 h-4 animate-pulse" />
-                  </div>
+                  <button 
+                    onClick={onOpenRouterLogin}
+                    className="p-1.5 rounded-xl border bg-blue-600/20 text-blue-400 border-blue-500/30 hover:border-blue-400 transition-all text-left"
+                    title="রাউটার লগইন সিস্টেম খুলুন"
+                  >
+                    <Router className="w-4 h-4 animate-pulse" />
+                  </button>
                   <div>
-                    <h1 className="text-xs font-bold text-white tracking-tight flex items-center gap-1.5">
-                      NetGuard Multi-Router
+                    <h1 
+                      onClick={onOpenRouterLogin}
+                      className="text-xs font-bold text-white tracking-tight flex items-center gap-1 cursor-pointer hover:text-blue-300"
+                    >
+                      <span className="truncate max-w-[125px]">{routerBrandName}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRouterLoggedIn ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
                     </h1>
-                    <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                      {clientConnectedVia === 'secondary' ? (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                          Via 2nd AP <span className="text-slate-500">➔ Main (192.168.1.1)</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                          Direct Main Gateway (192.168.1.1)
-                        </>
-                      )}
+                    <p className="text-[10px] text-slate-400 font-mono truncate max-w-[130px]">
+                      {isRouterLoggedIn ? 'লগইন সম্পন্ন' : 'লগইন প্রয়োজন'} • {routerGatewayIp}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  {onSyncRouterClients && (
+                    <button
+                      onClick={onSyncRouterClients}
+                      className="p-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-300 hover:text-white transition-all text-[10px] font-bold"
+                      title="রাউটার থেকে ক্লায়েন্ট সিঙ্ক"
+                    >
+                      <Share2 className="w-3 h-3" />
+                    </button>
+                  )}
                   <button
                     onClick={handleScan}
                     disabled={isScanning}
@@ -351,10 +366,30 @@ export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
               {/* Device List Scroll Area */}
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {filteredDevices.length === 0 ? (
-                  <div className="h-44 flex flex-col items-center justify-center text-center p-4 text-slate-500">
-                    <ShieldCheck className="w-8 h-8 mb-2 text-blue-400 stroke-1" />
-                    <p className="text-xs font-bold text-slate-300">কোনো ডেমো ডিভাইস নেই</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">শুধুমাত্র রাউটারে সংযুক্ত আসল (Genuine) ডিভাইস দেখাবে।</p>
+                  <div className="h-56 flex flex-col items-center justify-center text-center p-4 text-slate-500">
+                    <ShieldCheck className="w-9 h-9 mb-2 text-blue-400 stroke-1" />
+                    <p className="text-xs font-bold text-slate-200">কোনো ফেক ডিভাইস নেই</p>
+                    <p className="text-[10px] text-slate-400 mt-1 max-w-[210px] leading-relaxed">
+                      {routerBrandName} এ লগইন করে আসল সংযুক্ত ডিভাইসগুলো দেখুন।
+                    </p>
+                    <div className="flex flex-col gap-1.5 mt-3.5 w-full max-w-[190px]">
+                      {onOpenRouterLogin && (
+                        <button
+                          onClick={onOpenRouterLogin}
+                          className="w-full py-1.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center gap-1 shadow-md shadow-emerald-950"
+                        >
+                          <LogIn className="w-3 h-3" />
+                          <span>রাউটার লগইন ও সিঙ্ক</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={handleScan}
+                        className="w-full py-1.5 px-2 rounded-xl bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 text-[10px] font-semibold flex items-center justify-center gap-1 transition-all"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>নেটওয়ার্ক স্ক্যান</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   filteredDevices.map((device) => {

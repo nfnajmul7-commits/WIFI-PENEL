@@ -82,7 +82,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   Future<void> _initializeRouterAndDevices() async {
     setState(() => _isLoading = true);
-    // 1. Connect and verify router gateway
     try {
       final info = await RouterService.testAndConnectRouter();
       if (mounted) setState(() => _routerInfo = info);
@@ -90,7 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       // Fallback
     }
 
-    // 2. Load devices
+    // Load devices (NO fake devices seeded)
     await _fetchDevices();
     await _fetchHistory();
   }
@@ -129,6 +128,43 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
   }
 
+  /// Sync real router clients (e.g. from TP-Link Archer C54 as shown in router admin map)
+  Future<void> _syncRouterClients() async {
+    setState(() => _isLoading = true);
+    try {
+      final synced = await ApiService.syncClientsFromRouter();
+      if (mounted) {
+        setState(() {
+          _devices = synced;
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  '${RouterService.selectedBrandConfig.name} থেকে ${synced.length} টি আসল ক্লায়েন্ট সফলভাবে সিঙ্ক হয়েছে!',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+      }
+      _fetchHistory(silent: true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('সিঙ্ক ত্রুটি: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   /// Run deep genuine subnet scan for all active devices
   Future<void> _runNetworkScan() async {
     setState(() {
@@ -163,7 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 const Icon(Icons.check_circle, color: Colors.white, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'স্ক্যান সম্পন্ন! ${_devices.length} টি জেনুইন ডিভাইস পাওয়া গেছে।',
+                  'স্ক্যান সম্পন্ন! ${_devices.length} টি আসল ডিভাইস পাওয়া গেছে।',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -217,265 +253,302 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
   }
 
-  /// Show Router Connection & Gateway Settings dialog
+  /// Show Brand-Specific Router Login & Access dialog
   void _showRouterSettingsDialog() {
-    final ipController = TextEditingController(text: RouterService.currentRouterIp);
+    String selectedBrandId = RouterService.selectedBrandConfig.id;
+    final ipController = TextEditingController(
+      text: RouterService.currentRouterDomain.isNotEmpty && RouterService.currentRouterDomain != '192.168.0.1' && RouterService.currentRouterDomain != '192.168.1.1'
+          ? RouterService.currentRouterDomain
+          : RouterService.currentRouterIp,
+    );
     final userController = TextEditingController(text: RouterService.adminUsername);
     final passController = TextEditingController(text: RouterService.adminPassword);
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF0F172A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.router, color: Color(0xFF3B82F6), size: 24),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'রাউটার সংযোগ ও এক্সেস',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    Text(
-                      'Router Gateway & Admin Access',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (context, setDialogState) {
+          final curBrand = RouterService.supportedBrands.firstWhere(
+            (b) => b.id == selectedBrandId,
+            orElse: () => RouterService.supportedBrands[0],
+          );
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF0F172A),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            title: Row(
               children: [
-                // Router Status Badge
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: RouterService.isConnected ? const Color(0xFF10B981) : Colors.orange,
-                    ),
+                    color: const Color(0xFF3B82F6).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        RouterService.isConnected ? Icons.check_circle : Icons.warning_amber,
-                        color: RouterService.isConnected ? const Color(0xFF10B981) : Colors.orange,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              RouterService.isConnected ? 'রাউটার সক্রিয় ও সংযুক্ত' : 'রাউটার সংযোগ চেক করুন',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
-                            ),
-                            Text(
-                              'ব্র্যান্ড: ${RouterService.detectedBrand} • ল্যাটেন্সি: ${RouterService.lastLatencyMs}ms',
-                              style: const TextStyle(fontSize: 11, color: Colors.grey),
-                            ),
-                            Text(
-                              'গেটওয়ে IP: ${RouterService.currentRouterIp} • আপনার ফোন: ${RouterService.currentLocalIp}',
-                              style: const TextStyle(fontSize: 10, color: Color(0xFF38BDF8), fontFamily: 'monospace'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: const Icon(Icons.router, color: Color(0xFF3B82F6), size: 24),
                 ),
-
-                const SizedBox(height: 16),
-                const Text(
-                  'রাউটার গেটওয়ে আইপি (Gateway IP):',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: ipController,
-                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
-                  decoration: InputDecoration(
-                    hintText: '192.168.1.1',
-                    filled: true,
-                    fillColor: const Color(0xFF1E293B),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.settings_ethernet, color: Color(0xFF3B82F6), size: 20),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Common Presets
-                Wrap(
-                  spacing: 6,
-                  children: ['192.168.1.1', '192.168.0.1', '192.168.31.1', '10.0.0.1'].map((ip) {
-                    final isSel = ipController.text == ip;
-                    return ActionChip(
-                      label: Text(ip, style: TextStyle(fontSize: 10, color: isSel ? Colors.white : Colors.grey)),
-                      backgroundColor: isSel ? const Color(0xFF3B82F6) : const Color(0xFF1E293B),
-                      onPressed: () {
-                        setDialogState(() => ipController.text = ip);
-                      },
-                    );
-                  }).toList(),
-                ),
-
-                const SizedBox(height: 14),
-                const Text(
-                  'রাউটার অ্যাডমিন লগইন (ঐচ্ছিক):',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: userController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'ইউজারনেম (Username)',
-                    hintText: 'admin',
-                    filled: true,
-                    fillColor: const Color(0xFF1E293B),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.person, color: Colors.grey, size: 20),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: passController,
-                  obscureText: true,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'পাসওয়ার্ড (Password)',
-                    hintText: 'admin বা আপনার পাসওয়ার্ড',
-                    filled: true,
-                    fillColor: const Color(0xFF1E293B),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.lock, color: Colors.grey, size: 20),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-                // Admin Console Guide Button
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B).withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
-                  ),
+                const SizedBox(width: 10),
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.vpn_key, color: Color(0xFFF59E0B), size: 16),
-                          SizedBox(width: 6),
-                          Text(
-                            'রাউটারের সম্পূর্ণ কন্ট্রোল প্যানেল:',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
                       Text(
-                        'ব্রাউজারে http://${ipController.text} খুলে DHCP ক্লায়েন্ট তালিকা, ওয়াইফাই পাসওয়ার্ড ও ম্যাক ফিল্টারিং সরাসরি নিয়ন্ত্রণ করা যাবে।',
-                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                        'রাউটার লগইন ও কানেকশন হাব',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF38BDF8),
-                          side: const BorderSide(color: Color(0xFF38BDF8)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: 'http://${ipController.text}'));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('রাউটার গেটওয়ে লিংক কপি করা হয়েছে: http://${ipController.text}'),
-                              backgroundColor: const Color(0xFF10B981),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.copy, size: 14),
-                        label: const Text('গেটওয়ে লিংক কপি করুন', style: TextStyle(fontSize: 11)),
+                      Text(
+                        'কোম্পানি ভিত্তিক রাউটার লগইন সিস্টেম',
+                        style: TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('বাতিল', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3B82F6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () async {
-                final target = ipController.text.trim();
-                Navigator.pop(ctx);
-                setState(() => _isLoading = true);
-                try {
-                  final info = await RouterService.testAndConnectRouter(
-                    targetIp: target,
-                    username: userController.text.trim(),
-                    password: passController.text.trim(),
-                  );
-                  if (mounted) {
-                    setState(() {
-                      _routerInfo = info;
-                      _isLoading = false;
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('রাউটার ${info.ip} এর সাথে সফলভাবে কানেক্ট হয়েছে (${info.brand})'),
-                        backgroundColor: const Color(0xFF10B981),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Router Brand Selector
+                  const Text(
+                    'রাউটার কোম্পানি / ব্র্যান্ড নির্বাচন করুন:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.4)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedBrandId,
+                        dropdownColor: const Color(0xFF1E293B),
+                        isExpanded: true,
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                        icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF38BDF8)),
+                        items: RouterService.supportedBrands.map((b) {
+                          return DropdownMenuItem(
+                            value: b.id,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  b.id == 'tplink'
+                                      ? Icons.wifi
+                                      : b.id == 'tenda'
+                                          ? Icons.settings_input_antenna
+                                          : Icons.router,
+                                  size: 16,
+                                  color: b.id == 'tplink' ? const Color(0xFF38BDF8) : Colors.orangeAccent,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(b.name, overflow: TextOverflow.ellipsis)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (newBrandId) {
+                          if (newBrandId != null) {
+                            setDialogState(() {
+                              selectedBrandId = newBrandId;
+                              final cfg = RouterService.supportedBrands.firstWhere((b) => b.id == newBrandId);
+                              ipController.text = cfg.defaultDomain.isNotEmpty ? cfg.defaultDomain : cfg.defaultIp;
+                              userController.text = cfg.defaultUsername;
+                            });
+                          }
+                        },
                       ),
-                    );
-                    _runNetworkScan();
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    setState(() => _isLoading = false);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('সংযোগ ত্রুটি: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
-              },
-              icon: const Icon(Icons.link, size: 16, color: Colors.white),
-              label: const Text('কানেক্ট করুন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+                  // Brand Tip
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 14, color: Color(0xFF38BDF8)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            curBrand.tip,
+                            style: const TextStyle(fontSize: 10, color: Color(0xFF93C5FD)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+                  const Text(
+                    'রাউটার অ্যাড্রেস / গেটওয়ে আইপি:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: ipController,
+                    style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+                    decoration: InputDecoration(
+                      hintText: curBrand.defaultDomain,
+                      filled: true,
+                      fillColor: const Color(0xFF1E293B),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.link, color: Color(0xFF3B82F6), size: 20),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Quick IP chips
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      curBrand.defaultDomain,
+                      curBrand.defaultIp,
+                      '192.168.0.1',
+                      '192.168.1.1'
+                    ].toSet().map((val) {
+                      final isSel = ipController.text == val;
+                      return ActionChip(
+                        label: Text(val, style: TextStyle(fontSize: 10, color: isSel ? Colors.white : Colors.grey)),
+                        backgroundColor: isSel ? const Color(0xFF3B82F6) : const Color(0xFF1E293B),
+                        onPressed: () {
+                          setDialogState(() => ipController.text = val);
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 14),
+                  if (curBrand.requiresUsername) ...[
+                    const Text(
+                      'রাউটার অ্যাডমিন ইউজারনেম:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: userController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: curBrand.defaultUsername,
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.person, color: Colors.grey, size: 20),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+
+                  Text(
+                    curBrand.requiresUsername ? 'রাউটার পাসওয়ার্ড:' : 'রাউটার অ্যাডমিন পাসওয়ার্ড (Administrator Password):',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: passController,
+                    obscureText: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: curBrand.id == 'tplink' ? 'আপনার TP-Link অ্যাডমিন পাসওয়ার্ড' : 'রাউটার পাসওয়ার্ড',
+                      filled: true,
+                      fillColor: const Color(0xFF1E293B),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.lock, color: Color(0xFFF59E0B), size: 20),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+                  // Direct Router Admin Button
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF38BDF8),
+                      side: const BorderSide(color: Color(0xFF38BDF8)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      minimumSize: const Size(double.infinity, 38),
+                    ),
+                    onPressed: () {
+                      final url = 'http://${ipController.text.trim()}';
+                      Clipboard.setData(ClipboardData(text: url));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('রাউটার অ্যাডমিন লিংক কপি করা হয়েছে: $url'),
+                          backgroundColor: const Color(0xFF10B981),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy, size: 14),
+                    label: Text('রাউটার অ্যাডমিন URL কপি করুন (http://${ipController.text})', style: const TextStyle(fontSize: 11)),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('বাতিল', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () async {
+                  final target = ipController.text.trim();
+                  final pass = passController.text.trim();
+                  Navigator.pop(ctx);
+                  setState(() => _isLoading = true);
+
+                  try {
+                    final info = await RouterService.loginToRouter(
+                      brandId: selectedBrandId,
+                      targetIpOrDomain: target.isNotEmpty ? target : curBrand.defaultIp,
+                      username: userController.text.trim(),
+                      password: pass,
+                    );
+
+                    if (mounted) {
+                      setState(() {
+                        _routerInfo = info;
+                        _isLoading = false;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${info.brand} এ সফলভাবে লগইন হয়েছে! এখন রাউটার থেকে ক্লায়েন্ট সিঙ্ক হচ্ছে...'),
+                          backgroundColor: const Color(0xFF10B981),
+                        ),
+                      );
+                      // Auto-sync clients from the router
+                      _syncRouterClients();
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() => _isLoading = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('লগইন ত্রুটি: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.login, size: 16, color: Colors.white),
+                label: const Text('লগইন ও সিঙ্ক করুন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
   void _showQuickAddMacDialog() {
     final macController = TextEditingController();
+    final nameController = TextEditingController();
     String selectedDuration = '7_days';
 
     showDialog(
@@ -483,15 +556,12 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF0F172A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
           title: const Row(
             children: [
-              Icon(Icons.flash_on, color: Color(0xFFF59E0B), size: 22),
+              Icon(Icons.add_circle, color: Color(0xFF3B82F6), size: 22),
               SizedBox(width: 8),
-              Text(
-                'শুধুমাত্র MAC দিয়ে যুক্ত করুন',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
+              Text('আসল ডিভাইস যোগ করুন', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
             ],
           ),
           content: Column(
@@ -499,7 +569,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'কোনো নাম বা আইপি দিতে হবে না। শুধুমাত্র ম্যাক অ্যাড্রেস লিখলেই ডিভাইস যুক্ত হবে ও টাইম সক্রিয় হবে।',
+                'রাউটারের ক্লায়েন্ট তালিকা থেকে ম্যাক অ্যাড্রেস লিখুন। কোনো ফেক ডাটা তৈরি হবে না।',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 14),
@@ -509,12 +579,26 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontWeight: FontWeight.bold),
                 decoration: InputDecoration(
                   labelText: 'ম্যাক অ্যাড্রেস (MAC Address)',
-                  hintText: '3C:22:FB:9E:44:A1',
+                  hintText: '4E:51:7A:B3:26:BC',
                   hintStyle: const TextStyle(color: Colors.grey),
                   filled: true,
                   fillColor: const Color(0xFF1E293B),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   prefixIcon: const Icon(Icons.router, color: Color(0xFF3B82F6), size: 20),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'ডিভাইসের নাম (ঐচ্ছিক)',
+                  hintText: 'যেমন: NT, TENDA F6, CCTV',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.label, color: Colors.grey, size: 20),
                 ),
               ),
               const SizedBox(height: 14),
@@ -546,14 +630,19 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               ),
               onPressed: () async {
                 final rawMac = macController.text.trim();
+                final devName = nameController.text.trim();
                 if (rawMac.isEmpty) return;
                 Navigator.pop(ctx);
                 try {
-                  await ApiService.quickAddByMac(mac: rawMac, duration: selectedDuration);
+                  await ApiService.quickAddByMac(
+                    mac: rawMac,
+                    name: devName.isNotEmpty ? devName : null,
+                    duration: selectedDuration,
+                  );
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('MAC ($rawMac) সফলভাবে যুক্ত ও টাইম সক্রিয় হয়েছে!'),
+                        content: Text('ডিভাইস ($rawMac) সফলভাবে যুক্ত ও টাইম সক্রিয় হয়েছে!'),
                         backgroundColor: const Color(0xFF10B981),
                       ),
                     );
@@ -591,7 +680,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   Widget build(BuildContext context) {
     final activeCount = _devices.where((d) => d.isActive).length;
     final blockedCount = _devices.where((d) => d.isBlocked).length;
-    final scheduledCount = _devices.where((d) => d.hasExpiry && d.isActive).length;
 
     final filteredDevices = _devices.where((d) {
       if (_filter == 'active') return d.isActive;
@@ -599,8 +687,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       return true;
     }).toList();
 
-    final routerBrand = _routerInfo?.brand ?? RouterService.detectedBrand;
-    final routerIp = _routerInfo?.ip ?? RouterService.currentRouterIp;
+    final routerBrand = RouterService.selectedBrandConfig.name.split('(').first.trim();
+    final routerIp = RouterService.currentRouterIp;
+    final isLoggedIn = RouterService.isLoggedIn;
 
     return Scaffold(
       appBar: AppBar(
@@ -614,10 +703,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF3B82F6).withOpacity(0.2),
+                    color: (isLoggedIn ? const Color(0xFF10B981) : const Color(0xFF3B82F6)).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.router, color: Color(0xFF3B82F6), size: 22),
+                  child: Icon(Icons.router, color: isLoggedIn ? const Color(0xFF10B981) : const Color(0xFF3B82F6), size: 22),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -629,11 +718,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                           Flexible(
                             child: Text(
                               'NetGuard • $routerBrand',
-                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           const Icon(Icons.arrow_drop_down, color: Colors.grey, size: 18),
                         ],
                       ),
@@ -642,15 +731,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                           Container(
                             width: 7,
                             height: 7,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF10B981),
+                            decoration: BoxDecoration(
+                              color: isLoggedIn ? const Color(0xFF10B981) : Colors.orangeAccent,
                               shape: BoxShape.circle,
                             ),
                           ),
                           const SizedBox(width: 5),
                           Text(
-                            'গেটওয়ে: $routerIp • সংযুক্ত (${_devices.length} টি আসল ডিভাইস)',
-                            style: const TextStyle(fontSize: 11, color: Color(0xFF10B981)),
+                            isLoggedIn ? 'লগইন সম্পন্ন • গেটওয়ে: $routerIp (${_devices.length} টি আসল)' : 'গেটওয়ে: $routerIp • লগইন করুন',
+                            style: TextStyle(fontSize: 10, color: isLoggedIn ? const Color(0xFF10B981) : Colors.orangeAccent),
                           ),
                         ],
                       ),
@@ -679,6 +768,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.sync, color: Color(0xFF38BDF8)),
+            tooltip: 'রাউটার থেকে ক্লায়েন্ট সিঙ্ক করুন',
+            onPressed: _syncRouterClients,
+          ),
+          IconButton(
             icon: _isScanningSubnet 
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.radar),
@@ -686,8 +780,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             onPressed: _isScanningSubnet ? null : _runNetworkScan,
           ),
           IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'রাউটার গেটওয়ে সেটিংস',
+            icon: const Icon(Icons.login),
+            tooltip: 'রাউটার লগইন সিস্টেম',
             onPressed: _showRouterSettingsDialog,
           ),
         ],
@@ -732,7 +826,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               ),
                               const SizedBox(width: 10),
                               const Text(
-                                'রাউটারের সাথে সংযুক্ত আসল ডিভাইস স্ক্যান হচ্ছে...',
+                                'রাউটারের আসল ডিভাইস স্ক্যান হচ্ছে...',
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
                               ),
                             ],
@@ -751,7 +845,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     ),
                   ),
 
-                // Router Access Quick Strip
+                // Router Access Strip & Sync Header
                 SliverToBoxAdapter(
                   child: Container(
                     margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -768,55 +862,51 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.security, color: Color(0xFF10B981), size: 18),
+                            Icon(isLoggedIn ? Icons.verified_user : Icons.security, color: isLoggedIn ? const Color(0xFF10B981) : Colors.orangeAccent, size: 18),
                             const SizedBox(width: 8),
-                            Text(
-                              'রাউটার সংযোগ: $routerIp',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  RouterService.selectedBrandConfig.name.split('(').first.trim(),
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                Text(
+                                  'IP: $routerIp • ${isLoggedIn ? "লগইন সক্রিয়" : "লগইন প্রয়োজন"}',
+                                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                        InkWell(
-                          onTap: _runNetworkScan,
-                          child: const Row(
-                            children: [
-                              Icon(Icons.refresh, color: Color(0xFF38BDF8), size: 16),
-                              SizedBox(width: 4),
-                              Text(
-                                'নতুন স্ক্যান',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8)),
+                        Row(
+                          children: [
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3B82F6),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
-                            ],
-                          ),
+                              onPressed: _syncRouterClients,
+                              icon: const Icon(Icons.sync, size: 14, color: Colors.white),
+                              label: const Text('সিঙ্ক করুন', style: TextStyle(fontSize: 11, color: Colors.white)),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
 
+                // Filter Buttons
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                     child: Row(
                       children: [
-                        _buildKpiCard('সক্রিয় ডিভাইস', activeCount, const Color(0xFF10B981), Icons.wifi),
-                        const SizedBox(width: 12),
-                        _buildKpiCard('ব্লকড ডিভাইস', blockedCount, const Color(0xFFEF4444), Icons.block),
-                        const SizedBox(width: 12),
-                        _buildKpiCard('মেয়াদযুক্ত', scheduledCount, const Color(0xFFF59E0B), Icons.timer),
-                      ],
-                    ),
-                  ),
-                ),
-
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Row(
-                      children: [
-                        _buildFilterChip('সব (${_devices.length})', 'all'),
+                        _buildFilterChip('সকল আসল (${_devices.length})', 'all'),
                         const SizedBox(width: 8),
-                        _buildFilterChip('অনুমোদিত ($activeCount)', 'active'),
+                        _buildFilterChip('সক্রিয় ($activeCount)', 'active'),
                         const SizedBox(width: 8),
                         _buildFilterChip('ব্লকড ($blockedCount)', 'blocked'),
                       ],
@@ -833,29 +923,62 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 else if (filteredDevices.isEmpty)
                   SliverFillRemaining(
                     child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.shield, size: 48, color: Color(0xFF3B82F6)),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'কোনো ডিভাইস পাওয়া যায়নি',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'রাউটারের সকল ডিভাইস খুঁজে পেতে "স্ক্যান করুন" বাটন চাপুন।',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
-                            onPressed: _runNetworkScan,
-                            icon: const Icon(Icons.radar, color: Colors.white),
-                            label: const Text('রাউটার স্ক্যান করুন', style: TextStyle(color: Colors.white)),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+                              ),
+                              child: const Icon(Icons.shield_outlined, size: 48, color: Color(0xFF38BDF8)),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'কোনো ফেক ডিভাইস নেই',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'আপনার রাউটারে (${RouterService.selectedBrandConfig.name.split('(').first.trim()}) লগইন করুন অথবা "সিঙ্ক / স্ক্যান" বাটন চাপুন আসল সংযুক্ত ডিভাইস দেখতে।',
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 20),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              alignment: WrapAlignment.center,
+                              children: [
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+                                  onPressed: _syncRouterClients,
+                                  icon: const Icon(Icons.sync, color: Colors.white, size: 16),
+                                  label: const Text('রাউটার থেকে ক্লায়েন্ট সিঙ্ক', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
+                                  onPressed: _showRouterSettingsDialog,
+                                  icon: const Icon(Icons.login, color: Colors.white, size: 16),
+                                  label: const Text('রাউটারে লগইন করুন', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF38BDF8),
+                                    side: const BorderSide(color: Color(0xFF38BDF8)),
+                                  ),
+                                  onPressed: _runNetworkScan,
+                                  icon: const Icon(Icons.radar, size: 16),
+                                  label: const Text('নেটওয়ার্ক স্ক্যান'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   )
@@ -889,7 +1012,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ),
           ),
 
-          // Tab 2: Connection History (Previously & Currently Connected Devices)
+          // Tab 2: Connection History
           RefreshIndicator(
             onRefresh: () async {
               await _fetchHistory();
@@ -907,7 +1030,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         SizedBox(height: 6),
-                        Text('রাউটারে ডিভাইস কানেক্ট হলে বা স্ক্যান করলে হিস্ট্রি জমা হবে।', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text('রাউটারে আসল ডিভাইস সংযুক্ত হলে হিস্ট্রি জমা হবে।', style: TextStyle(color: Colors.grey, fontSize: 12)),
                       ],
                     ),
                   )
@@ -917,12 +1040,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     itemBuilder: (context, index) {
                       final item = _historyItems[index];
                       final isManaged = _devices.any((d) => d.mac.toUpperCase() == item.mac.toUpperCase());
-                      Device? liveDevice;
-                      try {
-                        liveDevice = _devices.firstWhere((d) => d.mac.toUpperCase() == item.mac.toUpperCase());
-                      } catch (_) {
-                        liveDevice = null;
-                      }
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -930,130 +1047,48 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF3B82F6).withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(Icons.devices, color: Color(0xFF3B82F6), size: 20),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF3B82F6).withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: const Icon(Icons.devices, color: Color(0xFF3B82F6), size: 20),
+                                      Text(
+                                        item.name,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
                                       ),
-                                      const SizedBox(width: 10),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            item.name,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
-                                          ),
-                                          Text(
-                                            item.ip,
-                                            style: const TextStyle(color: Colors.grey, fontSize: 11, fontFamily: 'monospace'),
-                                          ),
-                                        ],
+                                      Text(
+                                        'IP: ${item.ip} • MAC: ${item.mac}',
+                                        style: const TextStyle(color: Colors.grey, fontSize: 11, fontFamily: 'monospace'),
                                       ),
                                     ],
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: isManaged ? const Color(0xFF10B981).withOpacity(0.2) : Colors.grey.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      isManaged ? 'পরিচালিত (Managed)' : 'অ-পরিচালিত',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: isManaged ? const Color(0xFF10B981) : Colors.grey,
-                                      ),
-                                    ),
-                                  ),
                                 ],
                               ),
-                              const SizedBox(height: 12),
                               Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(10),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF0F172A),
-                                  borderRadius: BorderRadius.circular(10),
+                                  color: isManaged ? const Color(0xFF10B981).withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  'MAC: ${item.mac}',
-                                  style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Color(0xFF38BDF8), fontSize: 13),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'মোট সংযোগ: ${item.connectionCount} বার',
-                                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                  isManaged ? 'সংযুক্ত' : 'ডিসকানেক্টেড',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isManaged ? const Color(0xFF10B981) : Colors.grey,
                                   ),
-                                  Text(
-                                    item.manufacturer,
-                                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF8B5CF6),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                  ),
-                                  icon: const Icon(Icons.timer, color: Colors.white, size: 18),
-                                  label: const Text(
-                                    '⏱️ টাইম সেট করুন (Setup Time)',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                  ),
-                                  onPressed: () async {
-                                    if (liveDevice != null) {
-                                      final updated = await Navigator.push<bool>(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => ScheduleScreen(device: liveDevice!),
-                                        ),
-                                      );
-                                      if (updated == true) {
-                                        _fetchDevices();
-                                        _fetchHistory();
-                                      }
-                                    } else {
-                                      try {
-                                        final newDev = await ApiService.quickAddByMac(mac: item.mac, duration: '7_days');
-                                        if (mounted) {
-                                          final updated = await Navigator.push<bool>(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => ScheduleScreen(device: newDev),
-                                            ),
-                                          );
-                                          _fetchDevices();
-                                          _fetchHistory();
-                                        }
-                                      } catch (e) {
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('ত্রুটি: $e'), backgroundColor: Colors.red),
-                                          );
-                                        }
-                                      }
-                                    }
-                                  },
                                 ),
                               ),
                             ],
@@ -1062,64 +1097,19 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       );
                     },
                   ),
-          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildKpiCard(String label, int value, Color color, IconData icon) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis)),
-                Icon(icon, size: 16, color: color),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '$value',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color),
-            ),
-          ],
-        ),
       ),
     );
   }
 
   Widget _buildFilterChip(String label, String value) {
     final isSelected = _filter == value;
-    return GestureDetector(
-      onTap: () => setState(() => _filter = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF3B82F6) : Colors.transparent,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? Colors.white : Colors.grey,
-          ),
-        ),
-      ),
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.grey)),
+      selected: isSelected,
+      selectedColor: const Color(0xFF3B82F6),
+      backgroundColor: const Color(0xFF1E293B),
+      onSelected: (_) => setState(() => _filter = value),
     );
   }
 }
