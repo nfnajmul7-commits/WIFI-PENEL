@@ -710,47 +710,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Text('দ্রুত পরীক্ষা করতে ডেমো নমুনা নির্বাচন করুন:', style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.bold)),
+                  const Text('রাউটার থেকে কপি করা ক্লায়েন্ট টেবিল পেস্ট করুন:', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      ActionChip(
-                        avatar: const Icon(Icons.wifi, size: 14, color: Color(0xFF38BDF8)),
-                        label: const Text('TP-Link Archer C54', style: TextStyle(fontSize: 10, color: Colors.white)),
-                        backgroundColor: const Color(0xFF1E293B),
-                        onPressed: () {
-                          setDialogState(() {
-                            textController.text = NetworkScannerService.sampleTpLinkArcher;
-                            parsed = NetworkScannerService.parseRawRouterText(textController.text);
-                          });
-                        },
-                      ),
-                      ActionChip(
-                        avatar: const Icon(Icons.router, size: 14, color: Colors.orangeAccent),
-                        label: const Text('Tenda F3/F6', style: TextStyle(fontSize: 10, color: Colors.white)),
-                        backgroundColor: const Color(0xFF1E293B),
-                        onPressed: () {
-                          setDialogState(() {
-                            textController.text = NetworkScannerService.sampleTenda;
-                            parsed = NetworkScannerService.parseRawRouterText(textController.text);
-                          });
-                        },
-                      ),
-                      ActionChip(
-                        avatar: const Icon(Icons.smartphone, size: 14, color: Colors.redAccent),
-                        label: const Text('Xiaomi Mi', style: TextStyle(fontSize: 10, color: Colors.white)),
-                        backgroundColor: const Color(0xFF1E293B),
-                        onPressed: () {
-                          setDialogState(() {
-                            textController.text = NetworkScannerService.sampleXiaomi;
-                            parsed = NetworkScannerService.parseRawRouterText(textController.text);
-                          });
-                        },
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: textController,

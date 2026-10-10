@@ -507,42 +507,6 @@ export const RouterLoginModal: React.FC<RouterLoginModalProps> = ({
     }
   };
 
-  // Direct 1-Click: Add current user's detected phone with duration
-  const handleAddCurrentPhone = (durationKey: string = '7_days') => {
-    const randomHex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase();
-    const phoneMac = `7A:12:4E:${randomHex()}:${randomHex()}:${randomHex()}`;
-    const now = Date.now();
-    let expiry: string | null = null;
-    if (durationKey === '1_day') expiry = new Date(now + 24 * 3600 * 1000).toISOString();
-    else if (durationKey === '7_days') expiry = new Date(now + 7 * 24 * 3600 * 1000).toISOString();
-    else if (durationKey === '30_days') expiry = new Date(now + 30 * 24 * 3600 * 1000).toISOString();
-
-    const newDevice: Device = {
-      id: `dev-phone-${Date.now()}`,
-      name: currentDevice.name,
-      ip: getSubnetIp(102),
-      mac: phoneMac,
-      status: 'active',
-      category: currentDevice.category,
-      manufacturer: currentDevice.manufacturer,
-      connectedAt: new Date().toISOString(),
-      expiry: expiry,
-      bandwidthUsageMb: 85,
-      connectedRouter: 'main',
-      connectionType: '5G_WiFi',
-      isOnline: true,
-      lastPingMs: 1,
-    };
-
-    onLoginSuccess({
-      brand: selectedBrand,
-      gatewayIp: gatewayInput.trim() || selectedBrand.defaultIp,
-      isLoggedIn: true,
-      syncedDevices: [newDevice, ...parsedClients],
-    });
-    onClose();
-  };
-
   // Login handler
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -553,39 +517,16 @@ export const RouterLoginModal: React.FC<RouterLoginModalProps> = ({
       setIsSubmitting(false);
       setLoginStep('connected');
 
-      // Sync genuine clients:
-      // If user pasted clients, use them.
-      // If no clients pasted yet, automatically add user's verified phone so the screen is never dead empty!
-      let devicesToSync = [...parsedClients];
-      if (devicesToSync.length === 0) {
-        const randomHex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase();
-        const myMac = `7A:12:4E:${randomHex()}:${randomHex()}:${randomHex()}`;
-        devicesToSync.push({
-          id: `dev-myphone-${Date.now()}`,
-          name: `${currentDevice.name} (Active)`,
-          ip: getSubnetIp(103),
-          mac: myMac,
-          status: 'active',
-          category: currentDevice.category,
-          manufacturer: currentDevice.manufacturer,
-          connectedAt: new Date().toISOString(),
-          expiry: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-          bandwidthUsageMb: 110,
-          connectedRouter: 'main',
-          connectionType: '5G_WiFi',
-          isOnline: true,
-          lastPingMs: 2,
-        });
-      }
-
+      // Strictly Genuine: Only sync devices that user actually pasted/imported.
+      // ZERO fake or randomly generated devices.
       onLoginSuccess({
         brand: selectedBrand,
         gatewayIp: gatewayInput.trim() || selectedBrand.defaultIp,
         isLoggedIn: true,
-        syncedDevices: devicesToSync,
+        syncedDevices: parsedClients,
       });
       onClose();
-    }, 700);
+    }, 600);
   };
 
   // Direct genuine import confirmation
@@ -889,27 +830,27 @@ export const RouterLoginModal: React.FC<RouterLoginModalProps> = ({
                 </p>
               </div>
 
-              {/* 1-Click Add Current Phone Prompt Card (No fake devices!) */}
-              <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-950/60 to-purple-950/60 border border-blue-500/30 flex items-center justify-between gap-2.5">
+              {/* Zero Fake Devices Notice */}
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-850 flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-blue-600/20 text-blue-400 shrink-0">
-                    <Smartphone className="w-4 h-4" />
+                  <div className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
                   </div>
                   <div>
                     <h5 className="text-[11px] font-bold text-white">
-                      বর্তমান ফোন: {currentDevice.name}
+                      ১০০% আসল ডিভাইস নীতি (Zero Fake Devices)
                     </h5>
                     <p className="text-[10px] text-slate-400">
-                      ১-ক্লিকে আপনার ফোনটি এই রাউটারে যুক্ত ও ৭ দিনের অনুমতি দিন
+                      কোনো ডামি বা কাল্পনিক ডিভাইস নেই। রাউটার লগইন করার পর DHCP টেবিল পেস্ট করুন।
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleAddCurrentPhone('7_days')}
-                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold whitespace-nowrap shadow-md active:scale-95 transition-all shrink-0"
+                  onClick={() => setActiveTab('import')}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold whitespace-nowrap transition-colors shrink-0"
                 >
-                  ফোনটি যুক্ত করুন
+                  DHCP পেস্ট ট্যাব ➔
                 </button>
               </div>
 
@@ -979,57 +920,41 @@ export const RouterLoginModal: React.FC<RouterLoginModalProps> = ({
                 </div>
               </div>
 
-              {/* Quick Sample Presets */}
+              {/* Real Router Guidance */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[11px] font-bold text-slate-300">
-                    রাউটার ক্লায়েন্ট লিস্ট বা ARP টেবিল পেস্ট করুন:
+                    রাউটার থেকে কপি করা ক্লায়েন্ট টেবিল পেস্ট করুন:
                   </label>
-                  <span className="text-[10px] text-emerald-400 font-semibold">১০০% সঠিক আসল ডিভাইস</span>
+                  <span className="text-[10px] text-emerald-400 font-semibold">১০০% আসল ডিভাইস</span>
                 </div>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sample = `1 Galaxy-A52 3C-22-FB-9E-44-A1 192.168.0.100 01:59:30\n2 iPhone-13 F4-F5-DB-11-22-33 192.168.0.101 01:58:20\n3 Redmi-Note10 AC-23-3F-44-55-66 192.168.0.102 01:45:00\n4 Walton-Primo 7A-12-4E-99-88-77 192.168.0.103 01:30:15\n5 DESKTOP-PC 50-D4-F7-77-88-99 192.168.0.105 Permanent`;
-                      handleParseRawClientText(sample);
-                    }}
-                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-teal-500/30 text-[10px] text-teal-300 font-bold flex items-center gap-1 transition-all"
-                  >
-                    <Radio className="w-3 h-3 text-teal-400" />
-                    TP-Link Archer C54 নমুনা
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sample = `Galaxy-M32 192.168.0.101 E8:65:D4:11:22:33 Online\nRealme-8 192.168.0.102 CC:2D:1B:33:44:55 Online\nSmart-TV-LG 192.168.0.104 48:D7:05:66:77:88 Online`;
-                      handleParseRawClientText(sample);
-                    }}
-                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-orange-500/30 text-[10px] text-orange-300 font-bold flex items-center gap-1 transition-all"
-                  >
-                    <Radio className="w-3 h-3 text-orange-400" />
-                    Tenda F3/F6 নমুনা
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sample = `Redmi-K50 192.168.31.101 3C:22:FB:12:34:56 Online\nMi-Pad-5 192.168.31.102 7C:49:EB:78:90:12 Online`;
-                      handleParseRawClientText(sample);
-                    }}
-                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-red-500/30 text-[10px] text-red-300 font-bold flex items-center gap-1 transition-all"
-                  >
-                    <Radio className="w-3 h-3 text-red-400" />
-                    Xiaomi Mi নমুনা
-                  </button>
+
+                <div className="p-3 mb-2 rounded-2xl bg-slate-950 border border-slate-800 text-[11px] space-y-1.5 text-slate-300">
+                  <div className="font-bold text-slate-200 flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>আপনার রাউটারে ক্লায়েন্ট টেবিল কোথায় পাবেন:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px] text-slate-400">
+                    <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                      <strong className="text-teal-300">TP-Link:</strong> Advanced &gt; Network &gt; DHCP Server &gt; DHCP Client List
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                      <strong className="text-orange-300">Tenda:</strong> Bandwidth Control অথবা Online Clients
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                      <strong className="text-red-300">Xiaomi:</strong> Device Management (终端管理)
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                      <strong className="text-blue-300">অন্যান্য / Netgear:</strong> Attached Devices / ARP List
+                    </div>
+                  </div>
                 </div>
+
                 <textarea
                   rows={4}
                   value={rawClientInput}
                   onChange={(e) => handleParseRawClientText(e.target.value)}
-                  placeholder={`উদাহরণস্বরূপ আপনার রাউটারের টেবিল পেস্ট করুন:
-1  Galaxy-Phone   7A:12:4E:99:11:AB  192.168.0.103
-2  Redmi-Note     3C:22:FB:9E:44:A1  192.168.0.105
-3  Living-Room-TV 48:D7:05:32:A0:18  192.168.0.104`}
+                  placeholder="আপনার রাউটারের DHCP টেবিল বা অনলাইন ক্লায়েন্ট পেজ থেকে পুরো তালিকা কপি করে এখানে পেস্ট করুন (Ctrl+V)..."
                   className="w-full p-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
                 />
               </div>

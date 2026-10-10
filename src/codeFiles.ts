@@ -307,63 +307,6 @@ def get_router_audit_logs(limit: int = 50, db: Session = Depends(get_db)):
         .all()
     )
     return logs
-
-
-# Seed mock devices on initial startup if table is empty
-@app.on_event("startup")
-def seed_initial_devices():
-    db = SessionLocal()
-    if db.query(models.Device).count() == 0:
-        sample_devices = [
-            models.Device(
-                name="Kid's iPad Air",
-                ip="192.168.1.104",
-                mac="3C:22:FB:9E:44:A1",
-                status="active",
-                category="tablet",
-                manufacturer="Apple Inc.",
-                expiry=None
-            ),
-            models.Device(
-                name="PlayStation 5",
-                ip="192.168.1.142",
-                mac="70:28:8B:11:C3:59",
-                status="active",
-                category="gaming",
-                manufacturer="Sony Interactive",
-                expiry=None
-            ),
-            models.Device(
-                name="Samsung Smart TV 65\\"",
-                ip="192.168.1.118",
-                mac="A4:50:46:D8:10:E2",
-                status="active",
-                category="tv",
-                manufacturer="Samsung Electronics",
-                expiry=None
-            ),
-            models.Device(
-                name="MacBook Pro M3",
-                ip="192.168.1.101",
-                mac="F0:18:98:4C:77:20",
-                status="active",
-                category="laptop",
-                manufacturer="Apple Inc.",
-                expiry=None
-            ),
-            models.Device(
-                name="Pixel 9 Pro",
-                ip="192.168.1.109",
-                mac="5E:8B:F2:3A:99:02",
-                status="blocked",
-                category="mobile",
-                manufacturer="Google LLC",
-                expiry=None
-            )
-        ]
-        db.add_all(sample_devices)
-        db.commit()
-    db.close()
 `
   },
   {

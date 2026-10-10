@@ -38,7 +38,8 @@ import {
   Copy,
   CheckCheck,
   Router,
-  LogIn
+  LogIn,
+  ExternalLink
 } from 'lucide-react';
 import { Device, RouterLog, ConnectedRouterNode, ConnectedDeviceHistoryItem } from './types';
 import { CodeExplorer } from './components/CodeExplorer';
@@ -54,19 +55,44 @@ const INITIAL_CONNECTION_HISTORY: ConnectedDeviceHistoryItem[] = [];
 // No demo devices in active list. Initial state is empty unless genuine devices are scanned or synced!
 const INITIAL_GENUINE_DEVICES: Device[] = [];
 
+// Helper to aggressively detect and eliminate any leftover mock/fake devices
+export function isFakeMockDevice(mac?: string, name?: string): boolean {
+  if (!mac) return true;
+  const upperMac = mac.toUpperCase();
+  if (upperMac.startsWith('7A:12:4E') || upperMac.startsWith('7A-12-4E')) return true;
+  if (upperMac.startsWith('5E:8B:F2') || upperMac.startsWith('5E-8B-F2')) return true;
+  if (upperMac.startsWith('3C:22:FB:9E:44:A1') || upperMac.startsWith('3C-22-FB-9E-44-A1')) return true;
+  if (upperMac.startsWith('F4:F5:DB:11:22:33') || upperMac.startsWith('F4-F5-DB-11-22-33')) return true;
+  if (upperMac.startsWith('AC:23:3F:44:55:66') || upperMac.startsWith('AC-23-3F-44-55-66')) return true;
+  if (upperMac.startsWith('50:D4:F7:77:88:99') || upperMac.startsWith('50-D4-F7-77-88-99')) return true;
+  if (upperMac.startsWith('D4:')) return true;
+  if (name) {
+    const n = name.toLowerCase();
+    if (n.includes('galaxy-a52') || n.includes('iphone-13') || n.includes('redmi-note10') ||
+        n.includes('walton-primo') || n.includes('desktop-pc') || n.includes('pixel 7') ||
+        n.includes('galaxy-m32') || n.includes('realme-8') || n.includes('redmi-k50') ||
+        n.includes('mi-pad-5') || n.includes('smart-tv-lg')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'manager' | 'history' | 'firewall' | 'code' | 'guide'>('manager');
   const [managerSubTab, setManagerSubTab] = useState<'active' | 'history'>('active');
   const [managerViewMode, setManagerViewMode] = useState<'dashboard' | 'mobile'>('dashboard');
   const [clientConnectedVia, setClientConnectedVia] = useState<ConnectedRouterNode>('main');
   
-  // Persistent genuine devices stored in localStorage (no mock data)
+  // Persistent genuine devices stored in localStorage (no mock data, auto-purges old fake items)
   const [devices, setDevices] = useState<Device[]>(() => {
     try {
       const saved = localStorage.getItem('netguard_genuine_devices');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((d: Device) => !isFakeMockDevice(d.mac, d.name));
+        }
       }
     } catch (e) {
       console.error(e);
@@ -74,13 +100,15 @@ export default function App() {
     return INITIAL_GENUINE_DEVICES;
   });
 
-  // Persistent connection history of all devices that ever connected to router
+  // Persistent connection history of all devices that ever connected to router (no mock data)
   const [historyDevices, setHistoryDevices] = useState<ConnectedDeviceHistoryItem[]>(() => {
     try {
       const saved = localStorage.getItem('netguard_device_history');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((h: ConnectedDeviceHistoryItem) => !isFakeMockDevice(h.mac, h.name));
+        }
       }
     } catch (e) {
       console.error(e);
@@ -148,17 +176,10 @@ export default function App() {
   const [logs, setLogs] = useState<RouterLog[]>([
     {
       id: 'log-1',
-      timestamp: new Date(Date.now() - 60000).toISOString(),
+      timestamp: new Date().toISOString(),
       level: 'info',
       command: '[SYSTEM] NetGuard Router Time-Permission Daemon Active',
-      output: 'Gateway 192.168.1.1 online. Background expiry engine checking MAC tables every 1s.',
-    },
-    {
-      id: 'log-2',
-      timestamp: new Date(Date.now() - 30000).toISOString(),
-      level: 'action',
-      command: 'iptables -I FORWARD -m mac --mac-source 5E:8B:F2:3A:99:02 -j DROP',
-      output: 'Auto-Blocked: "পুরোনো ফোন (Pixel 7)" validity expired at 01:53:00. Traffic dropped.',
+      output: 'Gateway online. Background expiry engine checking MAC tables every 1s.',
     },
   ]);
 
@@ -627,77 +648,27 @@ export default function App() {
     });
   };
 
-  // Handler: Add Current User Phone as Genuine Device
-  const handleAddCurrentPhone = (durationKey: '1_day' | '7_days' | '15_days' | '30_days' | 'unlimited' = '7_days') => {
-    const currentInfo = detectCurrentClientDevice();
-    const randomHex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase();
-    const phoneMac = `7A:12:4E:${randomHex()}:${randomHex()}:${randomHex()}`;
-    const subnet = routerGatewayIp.includes('192.168.0') ? '192.168.0' : routerGatewayIp.includes('192.168.31') ? '192.168.31' : '192.168.1';
-    const phoneIp = `${subnet}.${Math.floor(Math.random() * 120) + 102}`;
-    
-    let targetExpiry: string | null = null;
-    const now = Date.now();
-    if (durationKey === '1_day') targetExpiry = new Date(now + 24 * 3600 * 1000).toISOString();
-    else if (durationKey === '7_days') targetExpiry = new Date(now + 7 * 24 * 3600 * 1000).toISOString();
-    else if (durationKey === '15_days') targetExpiry = new Date(now + 15 * 24 * 3600 * 1000).toISOString();
-    else if (durationKey === '30_days') targetExpiry = new Date(now + 30 * 24 * 3600 * 1000).toISOString();
-
-    const newDev: Device = {
-      id: `dev-myphone-${Date.now()}`,
-      name: currentInfo.name,
-      ip: phoneIp,
-      mac: phoneMac,
-      status: 'active',
-      category: currentInfo.category,
-      manufacturer: currentInfo.manufacturer,
-      connectedAt: new Date().toISOString(),
-      expiry: targetExpiry,
-      bandwidthUsageMb: 85,
-      connectedRouter: 'main',
-      connectionType: '5G_WiFi',
-      isOnline: true,
-      lastPingMs: 1,
-    };
-
-    setDevices((prev) => {
-      const exists = prev.some((d) => d.name === newDev.name);
-      return exists ? prev : [newDev, ...prev];
-    });
-
-    setHistoryDevices((prev) => [
-      {
-        id: `hist-${newDev.id}`,
-        mac: newDev.mac,
-        ip: newDev.ip,
-        name: newDev.name,
-        category: newDev.category,
-        manufacturer: newDev.manufacturer,
-        firstSeen: newDev.connectedAt,
-        lastSeen: newDev.connectedAt,
-        connectionCount: 1,
-        lastRouter: 'main',
-        isOnlineNow: true,
-        currentStatus: 'active',
-        expiry: newDev.expiry,
-      },
-      ...prev,
-    ]);
-
-    setLogs((prevLogs) => [
-      {
-        id: `log-${Date.now()}`,
-        timestamp: currentTime.toISOString(),
-        level: 'info',
-        command: `iptables -I FORWARD -m mac --mac-source ${phoneMac} -j ACCEPT`,
-        output: `[GENUINE-DEVICE] আসল মোবাইল সনাক্ত ও সংযুক্ত: "${newDev.name}" (${phoneMac})। অনুমতি: ${durationKey} দিন।`,
-      },
-      ...prevLogs.slice(0, 49),
-    ]);
-
-    setToastMessage({
-      text: `📱 আপনার বর্তমান ফোন "${newDev.name}" (${phoneMac}) সফলভাবে যুক্ত হয়েছে এবং অনুমতি সক্রিয় করা হয়েছে!`,
-      type: 'success',
-    });
+  // Handler: Clear All Fake and Cached Data
+  const handleClearAllFakeData = () => {
+    if (confirm('আপনি কি সমস্ত সংরক্ষিত ডেটা মুছে ফেলে সম্পূর্ণ ফ্রেশ ও আসল রাউটার ডেটা দিয়ে শুরু করতে চান?')) {
+      localStorage.removeItem('netguard_genuine_devices');
+      localStorage.removeItem('netguard_device_history');
+      setDevices([]);
+      setHistoryDevices([]);
+      setLogs([
+        {
+          id: `log-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          command: '[RESET] সিস্টেম রিসেট সম্পন্ন',
+          output: 'সকল পুরনো বা ডামি ডেটা মুছে ফেলা হয়েছে। এখন রাউটার থেকে আসল ক্লায়েন্ট তালিকা পেস্ট বা সিঙ্ক করুন।',
+        },
+      ]);
+      setToastMessage({
+        text: 'সকল ডেটা রিসেট হয়েছে। এখন আপনার রাউটারের আসল ক্লায়েন্ট তালিকা যুক্ত করুন।',
+        type: 'warn',
+      });
+    }
   };
 
   const handleRouterLoginSuccess = (config: {
@@ -710,52 +681,48 @@ export default function App() {
     setRouterGatewayIp(config.gatewayIp);
     setIsRouterLoggedIn(config.isLoggedIn);
 
-    // Merge genuine devices without overwriting existing managed devices
-    let finalDevices: Device[] = [];
     if (config.syncedDevices && config.syncedDevices.length > 0) {
       setDevices((prev) => {
         const existingMacs = new Set(prev.map((d) => d.mac.toUpperCase()));
         const newlyAdded = config.syncedDevices.filter((d) => !existingMacs.has(d.mac.toUpperCase()));
-        finalDevices = [...newlyAdded, ...prev];
-        return finalDevices;
+        return [...newlyAdded, ...prev];
+      });
+
+      // Also record into connection history
+      setHistoryDevices((prev) => {
+        const historyMacs = new Set(prev.map((h) => h.mac.toUpperCase()));
+        const newHist = config.syncedDevices
+          .filter((d) => !historyMacs.has(d.mac.toUpperCase()))
+          .map((d) => ({
+            id: `hist-${d.id}`,
+            mac: d.mac,
+            ip: d.ip,
+            name: d.name,
+            category: d.category,
+            manufacturer: d.manufacturer,
+            firstSeen: d.connectedAt,
+            lastSeen: d.connectedAt,
+            connectionCount: 1,
+            lastRouter: d.connectedRouter,
+            isOnlineNow: true,
+            currentStatus: 'active' as const,
+            expiry: d.expiry,
+          }));
+        return [...newHist, ...prev];
+      });
+
+      const brandShort = config.brand.shortName || config.brand.name.split('(')[0].trim();
+      setToastMessage({
+        text: `🎉 ${brandShort} থেকে ${config.syncedDevices.length}টি আসল ডিভাইস সফলভাবে লোড করা হয়েছে!`,
+        type: 'success',
       });
     } else {
-      // If syncedDevices is empty and current devices is empty, add user's active phone
-      setDevices((prev) => {
-        if (prev.length === 0) {
-          const currentInfo = detectCurrentClientDevice();
-          const randomHex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase();
-          const phoneMac = `7A:12:4E:${randomHex()}:${randomHex()}:${randomHex()}`;
-          const subnet = config.gatewayIp.includes('192.168.0') ? '192.168.0' : config.gatewayIp.includes('192.168.31') ? '192.168.31' : '192.168.1';
-          const defaultPhone: Device = {
-            id: `dev-auto-${Date.now()}`,
-            name: `${currentInfo.name} (Active)`,
-            ip: `${subnet}.102`,
-            mac: phoneMac,
-            status: 'active',
-            category: currentInfo.category,
-            manufacturer: currentInfo.manufacturer,
-            connectedAt: new Date().toISOString(),
-            expiry: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-            bandwidthUsageMb: 95,
-            connectedRouter: 'main',
-            connectionType: '5G_WiFi',
-            isOnline: true,
-            lastPingMs: 2,
-          };
-          finalDevices = [defaultPhone];
-          return [defaultPhone];
-        }
-        finalDevices = prev;
-        return prev;
+      const brandShort = config.brand.shortName || config.brand.name.split('(')[0].trim();
+      setToastMessage({
+        text: `🎉 ${brandShort} রাউটারে কানেক্ট হয়েছে! DHCP টেবিল পেস্ট করে আসল ডিভাইস যোগ করুন।`,
+        type: 'warn',
       });
     }
-
-    const brandShort = config.brand.shortName || config.brand.name.split('(')[0].trim();
-    setToastMessage({
-      text: `🎉 ${brandShort} রাউটারে সফলভাবে লগইন হয়েছে! গেটওয়ে: ${config.gatewayIp}`,
-      type: 'success',
-    });
   };
 
   const handleSyncFromRouter = () => {
@@ -797,8 +764,8 @@ export default function App() {
       setIsScanning(false);
       setIsRouterLoginOpen(true);
       setToastMessage({ 
-        text: 'সঠিক ডিভাইস আনতে আপনার রাউটারের DHCP টেবিল পেস্ট বা সিঙ্ক করুন।', 
-        type: 'success' 
+        text: 'সরাসরি আসল ডিভাইস আনতে আপনার রাউটারের DHCP টেবিল পেস্ট করুন।', 
+        type: 'warn' 
       });
     }, 600);
   };
@@ -811,12 +778,12 @@ export default function App() {
     }
   };
 
-  // Handler: Add New Device with Permission
+  // Handler: Add New Device with Permission (Strict Genuine MAC required)
   const handleAddNewDeviceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const formattedMac = newDeviceMac.trim() ? formatMacAddress(newDeviceMac.trim()) : '';
-    if (!formattedMac && !newDeviceName.trim()) {
-      setToastMessage({ text: 'অনুগ্রহ করে অন্তত ম্যাক অ্যাড্রেস (MAC) প্রদান করুন!', type: 'block' });
+    if (!formattedMac || formattedMac.length !== 17 || formattedMac.split(':').length !== 6) {
+      setToastMessage({ text: 'সঠিক ১২-ডিজিটের আসল MAC অ্যাড্রেস লিখুন (যেমন: CC:2D:1B:33:44:55)', type: 'block' });
       return;
     }
 
@@ -831,12 +798,11 @@ export default function App() {
       targetExpiry = new Date(currentTime.getTime() + 30 * 24 * 3600 * 1000);
     }
 
-    const randomOctet = Math.floor(Math.random() * 180) + 30;
-    const hex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase();
-    const finalMac = formattedMac || `D4:${hex()}:${hex()}:${hex()}:${hex()}:${hex()}`;
+    const finalMac = formattedMac;
     const matchedHistory = historyDevices.find((h) => h.mac.toUpperCase() === finalMac.toUpperCase());
     const finalName = newDeviceName.trim() || (matchedHistory ? matchedHistory.name : getVendorOrGenericName(finalMac));
-    const finalIp = newDeviceIp.trim() || (matchedHistory ? matchedHistory.ip : `192.168.1.${randomOctet}`);
+    const subnet = routerGatewayIp.includes('192.168.0') ? '192.168.0' : routerGatewayIp.includes('192.168.31') ? '192.168.31' : '192.168.1';
+    const finalIp = newDeviceIp.trim() || (matchedHistory ? matchedHistory.ip : `${subnet}.${100 + devices.length + 1}`);
     const expiryIso = targetExpiry ? targetExpiry.toISOString() : null;
 
     const newDev: Device = {
@@ -1387,6 +1353,15 @@ export default function App() {
                 </div>
               </div>
             </button>
+
+            <button
+              onClick={handleClearAllFakeData}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 text-xs font-semibold transition-all shadow-sm"
+              title="সকল পুরনো ও ডামি ডেটা মুছে ফ্রেশ শুরু করুন"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">ফেক ডাটা রিসেট</span>
+            </button>
           </div>
 
           {/* Navigation Tabs */}
@@ -1403,7 +1378,7 @@ export default function App() {
               }`}
             >
               <Smartphone className="w-3.5 h-3.5" />
-              ডিভাইস অনুমতি ও নিয়ন্ত্রণ
+              বর্তমানে সক্রিয় ({devices.filter(d => d.isOnline).length})
             </button>
 
             <button
@@ -1418,7 +1393,7 @@ export default function App() {
               }`}
             >
               <History className="w-3.5 h-3.5 text-purple-300" />
-              পূর্বে কানেক্ট হওয়া হিস্ট্রি ({historyDevices.length})
+              পূর্বে কানেক্টেড ছিল ({historyDevices.length})
             </button>
 
             <button
@@ -1737,7 +1712,7 @@ export default function App() {
                     isRouterLoggedIn={isRouterLoggedIn}
                     onOpenRouterLogin={() => setIsRouterLoginOpen(true)}
                     onSyncRouterClients={handleSyncFromRouter}
-                    onAddCurrentPhone={() => handleAddCurrentPhone('7_days')}
+                    onAddCurrentPhone={() => setIsAddDeviceOpen(true)}
                   />
                 </div>
 
@@ -2010,34 +1985,35 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-                    <button
-                      onClick={() => handleAddCurrentPhone('7_days')}
-                      className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-950 transition-all active:scale-[0.98]"
+                    <a
+                      href={`http://${routerGatewayIp}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-teal-950 transition-all active:scale-[0.98]"
                     >
-                      <Smartphone className="w-4 h-4 text-amber-300" />
-                      আমার বর্তমান ফোন যুক্ত করুন (1-ক্লিক)
-                    </button>
+                      <ExternalLink className="w-4 h-4" />
+                      রাউটার পেজ খুলুন ({routerGatewayIp})
+                    </a>
                     <button
                       onClick={() => setIsRouterLoginOpen(true)}
                       className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-950 transition-all active:scale-[0.98]"
                     >
                       <Router className="w-4 h-4" />
-                      রাউটারে লগইন ও ক্লায়েন্ট সিঙ্ক
-                    </button>
-                    <button
-                      onClick={handleScanRouterDevices}
-                      disabled={isScanning}
-                      className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition-all active:scale-[0.98]"
-                    >
-                      <Search className={`w-4 h-4 text-emerald-400 ${isScanning ? 'animate-spin' : ''}`} />
-                      {isScanning ? 'স্ক্যান করা হচ্ছে...' : 'লোকাল নেটওয়ার্ক স্ক্যান (ARP)'}
+                      DHCP ক্লায়েন্ট টেবিল পেস্ট ও সিঙ্ক
                     </button>
                     <button
                       onClick={() => setIsAddDeviceOpen(true)}
-                      className="px-3.5 py-2.5 rounded-2xl bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 text-xs font-bold flex items-center gap-1.5 transition-all"
+                      className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-950 transition-all active:scale-[0.98]"
                     >
                       <Plus className="w-4 h-4" />
-                      MAC দিয়ে যুক্ত করুন
+                      আসল MAC দিয়ে ডিভাইস যুক্ত করুন
+                    </button>
+                    <button
+                      onClick={handleClearAllFakeData}
+                      className="px-3.5 py-2.5 rounded-2xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all"
+                    >
+                      <Trash2 className="w-4 h-4 text-rose-400" />
+                      সব ফেক ডাটা মুছুন
                     </button>
                   </div>
                 </div>

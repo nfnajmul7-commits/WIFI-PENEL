@@ -81,20 +81,6 @@ class NetworkScannerService {
     }
   }
 
-  // Samples for quick testing in UI
-  static const String sampleTpLinkArcher = '''1 Galaxy-A52 3C-22-FB-9E-44-A1 192.168.0.100 01:59:30
-2 iPhone-13 F4-F5-DB-11-22-33 192.168.0.101 01:58:20
-3 Redmi-Note10 AC-23-3F-44-55-66 192.168.0.102 01:45:00
-4 Walton-Primo 7A-12-4E-99-88-77 192.168.0.103 01:30:15
-5 DESKTOP-PC 50-D4-F7-77-88-99 192.168.0.105 Permanent''';
-
-  static const String sampleTenda = '''Galaxy-M32 192.168.0.101 E8:65:D4:11:22:33 Online
-Realme-8 192.168.0.102 CC:2D:1B:33:44:55 Online
-Smart-TV-LG 192.168.0.104 48:D7:05:66:77:88 Online''';
-
-  static const String sampleXiaomi = '''Redmi-K50 192.168.31.101 3C:22:FB:12:34:56 Online
-Mi-Pad-5 192.168.31.102 7C:49:EB:78:90:12 Online''';
-
   /// Parse raw router table text (DHCP Leases / ARP / JSON) into genuine devices
   static List<Map<String, String>> parseRawRouterText(String text) {
     if (text.trim().isEmpty) return [];
@@ -640,15 +626,6 @@ Mi-Pad-5 192.168.31.102 7C:49:EB:78:90:12 Online''';
     if (vendor.contains('Apple')) return 'iPhone / iPad ($lastOctet)';
     if (category == 'laptop') return 'Computer PC ($lastOctet)';
     return 'ডিভাইস ($lastOctet)';
-  }
-
-  static String _generateRealisticMac(String ip) {
-    final hash = ip.hashCode.abs();
-    final b1 = (hash % 250).toRadixString(16).padLeft(2, '0').toUpperCase();
-    final b2 = ((hash ~/ 2) % 250).toRadixString(16).padLeft(2, '0').toUpperCase();
-    final last = int.tryParse(ip.split('.').last) ?? 10;
-    final b3 = last.toRadixString(16).padLeft(2, '0').toUpperCase();
-    return '50:D4:F7:$b1:$b2:$b3';
   }
 
   static void _recordHistory(String mac, String ip, String name, String category, String vendor) {
