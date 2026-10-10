@@ -40,6 +40,7 @@ interface MobileSimulatorProps {
   isRouterLoggedIn?: boolean;
   onOpenRouterLogin?: () => void;
   onSyncRouterClients?: () => void;
+  onAddCurrentPhone?: () => void;
 }
 
 export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
@@ -55,6 +56,7 @@ export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
   isRouterLoggedIn = false,
   onOpenRouterLogin,
   onSyncRouterClients,
+  onAddCurrentPhone,
 }) => {
   const [activeScreen, setActiveScreen] = useState<'dashboard' | 'schedule'>('dashboard');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
@@ -373,6 +375,15 @@ export const MobileSimulator: React.FC<MobileSimulatorProps> = ({
                       {routerBrandName} এ লগইন করে আসল সংযুক্ত ডিভাইসগুলো দেখুন।
                     </p>
                     <div className="flex flex-col gap-1.5 mt-3.5 w-full max-w-[190px]">
+                      {onAddCurrentPhone && (
+                        <button
+                          onClick={onAddCurrentPhone}
+                          className="w-full py-1.5 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center gap-1 shadow-md shadow-blue-950 active:scale-95 transition-all"
+                        >
+                          <Smartphone className="w-3 h-3 text-amber-300" />
+                          <span>আমার বর্তমান ফোন যুক্ত করুন</span>
+                        </button>
+                      )}
                       {onOpenRouterLogin && (
                         <button
                           onClick={onOpenRouterLogin}
